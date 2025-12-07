@@ -16,6 +16,12 @@ contract DepositEscrow is ReentrancyGuard, Ownable {
     error OnlyBeneficiaryCanConfirm();
     error ContractPeriodNotEnded();
     error TransferFailed();
+    error OnlyBeneficiaryCanRaiseDispute();
+    error AmountExceedsDeposit();
+    error OnlyDepositorCanRespond(); 
+    error AlreadyResponded();
+    error OnlyResolverCanDecide();
+    error DisputeStillActive();
 
     enum ContractStatus {
         WAITING_FOR_DEPOSIT,
@@ -34,14 +40,24 @@ contract DepositEscrow is ReentrancyGuard, Ownable {
         uint256 contractStart;  
         uint256 contractEnd;     
         uint256 autoReleaseTime;
-        }
+    }
+
+    struct Dispute {
+        uint256 claimedAmount;
+        string evidenceHash;
+        string responseHash;
+        bool depositorResponded; 
+        uint256 disputeStartTime;
+    }
 
     mapping(uint256 => DepositContract) public contracts;
+    mapping(uint256 => Dispute) public disputes;
     uint256 public nextContractId;
     address public resolver;
     uint256 public platformFee;
 
     uint256 public constant GRACE_PERIOD = 7 days;
+    uint256 public constant DISPUTE_RESOLUTION_TIME = 14 days;
 
     event ContractCreated(
         uint256 indexed contractId,
@@ -60,6 +76,32 @@ contract DepositEscrow is ReentrancyGuard, Ownable {
     event CleanExitConfirmed(
         uint256 indexed contractId,
         address indexed beneficiary
+    );
+
+    event DisputeRaised(
+        uint256 indexed contractId,
+        address indexed beneficiary,
+        uint256 claimedAmount,
+        string evidenceHash
+    );
+
+    event DepositorRespondedToDispute(
+        uint256 indexed contractId,
+        address indexed depositor,
+        string responseHash
+    );
+
+    event ResolverDecisionMade(
+        uint256 indexed contractId,
+        address indexed resolver,
+        uint256 amountToDepositor,
+        uint256 amountToBeneficiary
+    );
+
+    event DisputeResolvedByTimeout(
+        uint256 indexed contractId,
+        address indexed depositor,
+        uint256 amount
     );
 
     constructor(address _resolver, uint256 _platformFee) Ownable(msg.sender) {
@@ -141,5 +183,80 @@ contract DepositEscrow is ReentrancyGuard, Ownable {
     function getContract(uint256 _contractId) public view returns (DepositContract memory) {
         if (contracts[_contractId].id == 0) revert ContractDoesNotExist();
         return contracts[_contractId];
+    }
+
+    function raiseDispute(
+        uint256 _contractId, 
+        uint256 _claimedAmount, 
+        string memory _evidenceHash
+    ) public {
+        if (contracts[_contractId].id == 0) revert ContractDoesNotExist();
+        if (_claimedAmount == 0) revert DepositMustBeGreaterThanZero(); 
+        if (contracts[_contractId].beneficiary != msg.sender) revert OnlyBeneficiaryCanRaiseDispute();
+        if (contracts[_contractId].status != ContractStatus.ACTIVE) revert InvalidStatus();              
+        if (block.timestamp < contracts[_contractId].contractEnd) revert ContractPeriodNotEnded();       
+        if (_claimedAmount > contracts[_contractId].depositAmount) revert AmountExceedsDeposit();            
+        
+        disputes[_contractId] = Dispute({
+            claimedAmount: _claimedAmount,
+            evidenceHash: _evidenceHash,
+            responseHash: "",    
+            depositorResponded: false,
+            disputeStartTime: block.timestamp  
+        });
+        
+        contracts[_contractId].status = ContractStatus.DISPUTED; 
+        
+        emit DisputeRaised(_contractId, msg.sender, _claimedAmount, _evidenceHash);
+    }
+
+    function respondToDispute(uint256 _contractId, string memory _responseHash) public {
+        if (contracts[_contractId].id == 0) revert ContractDoesNotExist();
+        if (msg.sender != contracts[_contractId].depositor) revert OnlyDepositorCanRespond();
+        if (contracts[_contractId].status != ContractStatus.DISPUTED) revert InvalidStatus();
+        if (disputes[_contractId].depositorResponded) revert AlreadyResponded();
+        
+        disputes[_contractId].responseHash = _responseHash;
+        disputes[_contractId].depositorResponded = true;
+    
+        emit DepositorRespondedToDispute(_contractId, msg.sender, _responseHash);
+    }
+
+    function makeResolverDecision(
+        uint256 _contractId,
+        uint256 _amountToBeneficiary
+    ) public nonReentrant {
+        if (resolver != msg.sender) revert OnlyResolverCanDecide();
+        if (contracts[_contractId].id == 0) revert ContractDoesNotExist();
+        if (contracts[_contractId].status != ContractStatus.DISPUTED) revert InvalidStatus(); 
+        if (_amountToBeneficiary > contracts[_contractId].depositAmount) revert AmountExceedsDeposit();
+        
+        (bool success1, ) = contracts[_contractId].beneficiary.call{value: _amountToBeneficiary}("");
+        if (!success1) revert TransferFailed();
+        
+        uint256 amountToDepositor = contracts[_contractId].depositAmount - _amountToBeneficiary;
+
+        (bool success2, ) = contracts[_contractId].depositor.call{value: amountToDepositor}("");
+        if (!success2) revert TransferFailed();
+        
+        contracts[_contractId].status = ContractStatus.RESOLVED; 
+        
+        emit ResolverDecisionMade(_contractId, msg.sender, amountToDepositor, _amountToBeneficiary);
+    }
+
+    function resolveDisputeByTimeout(uint256 _contractId) public nonReentrant {
+        if (contracts[_contractId].id == 0) revert ContractDoesNotExist();
+        if (contracts[_contractId].status != ContractStatus.DISPUTED) revert InvalidStatus(); 
+     
+        if (block.timestamp < disputes[_contractId].disputeStartTime + DISPUTE_RESOLUTION_TIME) {
+            revert DisputeStillActive();
+        }
+        
+        (bool success, ) = contracts[_contractId].depositor.call{value: contracts[_contractId].depositAmount}("");
+        if (!success) revert TransferFailed();
+        
+        contracts[_contractId].status = ContractStatus.RESOLVED;
+        
+        emit DisputeResolvedByTimeout(_contractId, contracts[_contractId].depositor, contracts[_contractId].depositAmount);
     }
 }
