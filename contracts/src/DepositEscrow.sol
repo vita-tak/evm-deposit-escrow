@@ -3,8 +3,11 @@ pragma solidity 0.8.30;
 
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
 contract DepositEscrow is ReentrancyGuard, Ownable {
+    using SafeERC20 for IERC20;
 
     error DepositMustBeGreaterThanZero();
     error EndMustBeAfterStart();
@@ -56,6 +59,7 @@ contract DepositEscrow is ReentrancyGuard, Ownable {
     address public resolver;
     uint256 public platformFee;
 
+    IERC20 public immutable USDC_TOKEN; 
     uint256 public constant GRACE_PERIOD = 7 days;
     uint256 public constant DISPUTE_RESOLUTION_TIME = 14 days;
 
@@ -104,10 +108,11 @@ contract DepositEscrow is ReentrancyGuard, Ownable {
         uint256 amount
     );
 
-    constructor(address _resolver, uint256 _platformFee) Ownable(msg.sender) {
+    constructor(address _resolver, uint256 _platformFee, address _usdcToken) Ownable(msg.sender) {
         resolver = _resolver;
         platformFee = _platformFee;
         nextContractId = 1;
+        USDC_TOKEN = IERC20(_usdcToken);
     }
 
     function createContract(
@@ -147,7 +152,7 @@ contract DepositEscrow is ReentrancyGuard, Ownable {
         }
     }
 
-    function payDeposit(uint256 _contractId) public payable nonReentrant {
+    function payDeposit(uint256 _contractId) public nonReentrant {
         DepositContract storage depositContract = contracts[_contractId];
         
         if (depositContract.id == 0) revert ContractDoesNotExist();
@@ -156,12 +161,12 @@ contract DepositEscrow is ReentrancyGuard, Ownable {
         
         uint256 fee = (depositContract.depositAmount * platformFee) / 10000;
         uint256 totalRequired = depositContract.depositAmount + fee;
-        
-        if (msg.value != totalRequired) revert IncorrectAmount();
+
+        USDC_TOKEN.safeTransferFrom(msg.sender, address(this), totalRequired);
         
         depositContract.status = ContractStatus.ACTIVE;
         
-        emit DepositPaid(_contractId, msg.sender, msg.value);
+        emit DepositPaid(_contractId, msg.sender, totalRequired);
     }
 
     function confirmCleanExit(uint256 _contractId) public nonReentrant {
@@ -172,8 +177,7 @@ contract DepositEscrow is ReentrancyGuard, Ownable {
         if (depositContract.status != ContractStatus.ACTIVE) revert InvalidStatus();
         if (block.timestamp < depositContract.contractEnd) revert ContractPeriodNotEnded();  
     
-        (bool success, ) = depositContract.depositor.call{value: depositContract.depositAmount}("");
-        if (!success) revert TransferFailed();
+        USDC_TOKEN.safeTransfer(depositContract.depositor, depositContract.depositAmount);
     
         depositContract.status = ContractStatus.COMPLETED;
         
@@ -231,13 +235,11 @@ contract DepositEscrow is ReentrancyGuard, Ownable {
         if (contracts[_contractId].status != ContractStatus.DISPUTED) revert InvalidStatus(); 
         if (_amountToBeneficiary > contracts[_contractId].depositAmount) revert AmountExceedsDeposit();
         
-        (bool success1, ) = contracts[_contractId].beneficiary.call{value: _amountToBeneficiary}("");
-        if (!success1) revert TransferFailed();
-        
+        USDC_TOKEN.safeTransfer(contracts[_contractId].beneficiary, _amountToBeneficiary);
+
         uint256 amountToDepositor = contracts[_contractId].depositAmount - _amountToBeneficiary;
 
-        (bool success2, ) = contracts[_contractId].depositor.call{value: amountToDepositor}("");
-        if (!success2) revert TransferFailed();
+        USDC_TOKEN.safeTransfer(contracts[_contractId].depositor, amountToDepositor);
         
         contracts[_contractId].status = ContractStatus.RESOLVED; 
         
@@ -252,8 +254,7 @@ contract DepositEscrow is ReentrancyGuard, Ownable {
             revert DisputeStillActive();
         }
         
-        (bool success, ) = contracts[_contractId].depositor.call{value: contracts[_contractId].depositAmount}("");
-        if (!success) revert TransferFailed();
+        USDC_TOKEN.safeTransfer(contracts[_contractId].depositor, contracts[_contractId].depositAmount);
         
         contracts[_contractId].status = ContractStatus.RESOLVED;
         
