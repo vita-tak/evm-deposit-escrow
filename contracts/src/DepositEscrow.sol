@@ -196,21 +196,6 @@ contract DepositEscrow is AutomationCompatibleInterface, ReentrancyGuard, Ownabl
         emit DepositPaid(_contractId, msg.sender, totalRequired);
     }
 
-    function confirmCleanExit(uint256 _contractId) public nonReentrant {
-        DepositContract storage depositContract = contracts[_contractId];
-
-        if (depositContract.id == 0) revert ContractDoesNotExist();
-        if (depositContract.beneficiary != msg.sender) revert OnlyBeneficiaryCanConfirm();
-        if (depositContract.status != ContractStatus.ACTIVE) revert InvalidStatus();
-        if (block.timestamp < depositContract.contractEnd) revert ContractPeriodNotEnded();  
-    
-        USDC_TOKEN.safeTransfer(depositContract.depositor, depositContract.depositAmount);
-    
-        depositContract.status = ContractStatus.COMPLETED;
-        
-        emit CleanExitConfirmed(_contractId, msg.sender);
-    }
-
     function getContract(uint256 _contractId) public view returns (DepositContract memory) {
         if (contracts[_contractId].id == 0) revert ContractDoesNotExist();
         return contracts[_contractId];
@@ -274,46 +259,46 @@ contract DepositEscrow is AutomationCompatibleInterface, ReentrancyGuard, Ownabl
     }
 
     function resolveDisputeByTimeout(uint256 _contractId) public nonReentrant {
-        if (contracts[_contractId].id == 0) revert ContractDoesNotExist();
-        if (contracts[_contractId].status != ContractStatus.DISPUTED) revert InvalidStatus(); 
-     
         if (block.timestamp < disputes[_contractId].disputeStartTime + DISPUTE_RESOLUTION_TIME) {
             revert DisputeStillActive();
         }
         
-        USDC_TOKEN.safeTransfer(contracts[_contractId].depositor, contracts[_contractId].depositAmount);
-        
-        contracts[_contractId].status = ContractStatus.RESOLVED;
+        _resolveDisputeToDepositor(_contractId);
         
         emit DisputeResolvedByTimeout(_contractId, contracts[_contractId].depositor, contracts[_contractId].depositAmount);
     }
 
-    function _autoReleaseDeposit(uint256 _contractId) internal {
+    function confirmCleanExit(uint256 _contractId) public nonReentrant {
         DepositContract storage depositContract = contracts[_contractId];
 
-        if (depositContract.id == 0) revert ContractDoesNotExist();
-        if (depositContract.status != ContractStatus.ACTIVE) revert InvalidStatus();
-        if (block.timestamp < depositContract.autoReleaseTime) revert TooEarlyForAutoRelease();
-
-        USDC_TOKEN.safeTransfer(depositContract.depositor, depositContract.depositAmount);
-
-        depositContract.status = ContractStatus.COMPLETED;
-
-        emit AutoReleaseExecuted(_contractId, depositContract.depositor, depositContract.depositAmount);
+        if (depositContract.beneficiary != msg.sender) revert OnlyBeneficiaryCanConfirm();
+        if (block.timestamp < depositContract.contractEnd) revert ContractPeriodNotEnded();
+        
+        _releaseDepositToDepositor(_contractId);
+        
+        emit CleanExitConfirmed(_contractId, msg.sender);
     }
 
-    function _resolveDisputeInternal(uint256 _contractId) internal {
+    function _releaseDepositToDepositor(uint256 _contractId) internal {
         DepositContract storage depositContract = contracts[_contractId];
+        
+        if (depositContract.id == 0) revert ContractDoesNotExist();
+        if (depositContract.status != ContractStatus.ACTIVE) revert InvalidStatus();
+        
+        USDC_TOKEN.safeTransfer(depositContract.depositor, depositContract.depositAmount);
+        
+        depositContract.status = ContractStatus.COMPLETED;
+    }
 
+    function _resolveDisputeToDepositor(uint256 _contractId) internal {
+        DepositContract storage depositContract = contracts[_contractId];
+        
         if (depositContract.id == 0) revert ContractDoesNotExist();
         if (depositContract.status != ContractStatus.DISPUTED) revert InvalidStatus();
-        if (block.timestamp < disputes[_contractId].disputeStartTime + DISPUTE_RESOLUTION_TIME) revert DisputeStillActive();
-    
+        
         USDC_TOKEN.safeTransfer(depositContract.depositor, depositContract.depositAmount);
-
+        
         depositContract.status = ContractStatus.RESOLVED;
-
-        emit DisputeResolvedByTimeout(_contractId, depositContract.depositor, depositContract.depositAmount);
     }
 
     function setForwarder(address _forwarder) external onlyOwner {
@@ -346,9 +331,22 @@ contract DepositEscrow is AutomationCompatibleInterface, ReentrancyGuard, Ownabl
         (uint256 contractId, ActionType action) = abi.decode(performData, (uint256, ActionType));
 
         if (action == ActionType.AUTO_RELEASE) {
-            _autoReleaseDeposit(contractId);
+            if (block.timestamp < contracts[contractId].autoReleaseTime) {
+                revert TooEarlyForAutoRelease();
+            }
+            
+            _releaseDepositToDepositor(contractId);
+            
+            emit AutoReleaseExecuted(contractId, contracts[contractId].depositor, contracts[contractId].depositAmount);
+            
         } else if (action == ActionType.DISPUTE_TIMEOUT) {
-            _resolveDisputeInternal(contractId);
+            if (block.timestamp < disputes[contractId].disputeStartTime + DISPUTE_RESOLUTION_TIME) {
+                revert DisputeStillActive();
+            }
+
+            _resolveDisputeToDepositor(contractId);
+
+            emit DisputeResolvedByTimeout(contractId, contracts[contractId].depositor, contracts[contractId].depositAmount);
         }
     }
 
