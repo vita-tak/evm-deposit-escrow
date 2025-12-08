@@ -67,6 +67,9 @@ contract DepositEscrow is AutomationCompatibleInterface, ReentrancyGuard, Ownabl
     address public resolver;
     uint256 public platformFee;
 
+    uint256[] private activeContractsForAutoRelease;
+    uint256[] private disputedContractsForTimeout;
+
     IERC20 public immutable USDC_TOKEN; 
     uint256 public constant GRACE_PERIOD = 7 days;
     uint256 public constant DISPUTE_RESOLUTION_TIME = 14 days;
@@ -142,12 +145,7 @@ contract DepositEscrow is AutomationCompatibleInterface, ReentrancyGuard, Ownabl
         forwarder = address(0);
     }
 
-    function createContract(
-        address _depositor,
-        uint256 _depositAmount,
-        uint256 _contractStart,
-        uint256 _contractEnd
-    ) public {
+    function createContract(address _depositor, uint256 _depositAmount, uint256 _contractStart, uint256 _contractEnd) public {
         if (_depositAmount == 0) revert DepositMustBeGreaterThanZero();
         if (_contractEnd <= _contractStart) revert EndMustBeAfterStart();
         if (_depositor == address(0)) revert InvalidDepositorAddress();
@@ -192,6 +190,8 @@ contract DepositEscrow is AutomationCompatibleInterface, ReentrancyGuard, Ownabl
         USDC_TOKEN.safeTransferFrom(msg.sender, address(this), totalRequired);
         
         depositContract.status = ContractStatus.ACTIVE;
+
+        activeContractsForAutoRelease.push(_contractId);
         
         emit DepositPaid(_contractId, msg.sender, totalRequired);
     }
@@ -222,6 +222,8 @@ contract DepositEscrow is AutomationCompatibleInterface, ReentrancyGuard, Ownabl
         });
         
         contracts[_contractId].status = ContractStatus.DISPUTED; 
+
+        disputedContractsForTimeout.push(_contractId);
         
         emit DisputeRaised(_contractId, msg.sender, _claimedAmount, _evidenceHash);
     }
@@ -238,10 +240,7 @@ contract DepositEscrow is AutomationCompatibleInterface, ReentrancyGuard, Ownabl
         emit DepositorRespondedToDispute(_contractId, msg.sender, _responseHash);
     }
 
-    function makeResolverDecision(
-        uint256 _contractId,
-        uint256 _amountToBeneficiary
-    ) public nonReentrant {
+    function makeResolverDecision(uint256 _contractId, uint256 _amountToBeneficiary) public nonReentrant {
         if (resolver != msg.sender) revert OnlyResolverCanDecide();
         if (contracts[_contractId].id == 0) revert ContractDoesNotExist();
         if (contracts[_contractId].status != ContractStatus.DISPUTED) revert InvalidStatus(); 
@@ -253,7 +252,8 @@ contract DepositEscrow is AutomationCompatibleInterface, ReentrancyGuard, Ownabl
 
         USDC_TOKEN.safeTransfer(contracts[_contractId].depositor, amountToDepositor);
         
-        contracts[_contractId].status = ContractStatus.RESOLVED; 
+        contracts[_contractId].status = ContractStatus.RESOLVED;
+        _removeFromArray(disputedContractsForTimeout, _contractId);
         
         emit ResolverDecisionMade(_contractId, msg.sender, amountToDepositor, _amountToBeneficiary);
     }
@@ -264,6 +264,7 @@ contract DepositEscrow is AutomationCompatibleInterface, ReentrancyGuard, Ownabl
         }
         
         _resolveDisputeToDepositor(_contractId);
+        _removeFromArray(disputedContractsForTimeout, _contractId);
         
         emit DisputeResolvedByTimeout(_contractId, contracts[_contractId].depositor, contracts[_contractId].depositAmount);
     }
@@ -275,6 +276,7 @@ contract DepositEscrow is AutomationCompatibleInterface, ReentrancyGuard, Ownabl
         if (block.timestamp < depositContract.contractEnd) revert ContractPeriodNotEnded();
         
         _releaseDepositToDepositor(_contractId);
+        _removeFromArray(activeContractsForAutoRelease, _contractId);
         
         emit CleanExitConfirmed(_contractId, msg.sender);
     }
@@ -313,15 +315,20 @@ contract DepositEscrow is AutomationCompatibleInterface, ReentrancyGuard, Ownabl
         override
         returns (bool upkeepNeeded, bytes memory performData)
     {
-        for (uint256 i = 1; i < nextContractId; i++) {
-            DepositContract storage currentContract = contracts[i];
-
-            if (currentContract.id == 0) continue;
-            if (currentContract.status == ContractStatus.ACTIVE && block.timestamp >= currentContract.autoReleaseTime) {
-                return (true, abi.encode(i, ActionType.AUTO_RELEASE));
+        for (uint256 i = 0; i < activeContractsForAutoRelease.length; i++) {
+            uint256 contractId = activeContractsForAutoRelease[i];
+            DepositContract memory c = contracts[contractId];
+            
+            if (block.timestamp >= c.autoReleaseTime) {
+                return (true, abi.encode(contractId, ActionType.AUTO_RELEASE));
             }
-            if (currentContract.status == ContractStatus.DISPUTED && block.timestamp >= disputes[i].disputeStartTime + DISPUTE_RESOLUTION_TIME) {
-                return (true, abi.encode(i, ActionType.DISPUTE_TIMEOUT));
+        }
+        for (uint256 i = 0; i < disputedContractsForTimeout.length; i++) {
+            uint256 contractId = disputedContractsForTimeout[i];
+            Dispute memory d = disputes[contractId];
+            
+            if (block.timestamp >= d.disputeStartTime + DISPUTE_RESOLUTION_TIME) {
+                return (true, abi.encode(contractId, ActionType.DISPUTE_TIMEOUT));
             }
         }
         return (false, "");
@@ -336,6 +343,7 @@ contract DepositEscrow is AutomationCompatibleInterface, ReentrancyGuard, Ownabl
             }
             
             _releaseDepositToDepositor(contractId);
+            _removeFromArray(activeContractsForAutoRelease, contractId);
             
             emit AutoReleaseExecuted(contractId, contracts[contractId].depositor, contracts[contractId].depositAmount);
             
@@ -345,10 +353,19 @@ contract DepositEscrow is AutomationCompatibleInterface, ReentrancyGuard, Ownabl
             }
 
             _resolveDisputeToDepositor(contractId);
+            _removeFromArray(disputedContractsForTimeout, contractId);
 
             emit DisputeResolvedByTimeout(contractId, contracts[contractId].depositor, contracts[contractId].depositAmount);
         }
     }
 
-
+    function _removeFromArray(uint256[] storage array, uint256 valueToRemove) private {
+        for (uint256 i = 0; i < array.length; i++) {
+            if (array[i] == valueToRemove) {
+                array[i] = array[array.length - 1];
+                array.pop();
+                return;
+            }
+        }
+    }
 }
