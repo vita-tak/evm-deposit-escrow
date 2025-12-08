@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.30;
 
-import "forge-std/Test.sol";
+import {Test} from "forge-std/Test.sol";
 import {DepositEscrow} from "../src/DepositEscrow.sol";
 import {ERC20Mock} from "@openzeppelin/contracts/mocks/token/ERC20Mock.sol";
 
@@ -43,7 +43,7 @@ contract ChainlinkAutomationTest is Test {
         forwarder = makeAddr("forwarder");
         
         usdc = new ERC20Mock();
-        escrow = new DepositEscrow(resolver, PLATFORM_FEE, address(usdc));
+        escrow = new DepositEscrow(resolver, PLATFORM_FEE, address(usdc), resolver);
         
         usdc.mint(depositor, 10000e6);
         escrow.setForwarder(forwarder);

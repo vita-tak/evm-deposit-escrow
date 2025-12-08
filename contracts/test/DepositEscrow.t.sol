@@ -18,7 +18,7 @@ contract DepositEscrowTest is Test {
     
     function setUp() public {
         usdc = new ERC20Mock();
-        escrow = new DepositEscrow(resolver, PLATFORM_FEE, address(usdc));
+        escrow = new DepositEscrow(resolver, PLATFORM_FEE, address(usdc), resolver);
         usdc.mint(depositor, 10000e6);
         vm.prank(depositor);
         usdc.approve(address(escrow), type(uint256).max);
@@ -91,7 +91,8 @@ contract DepositEscrowTest is Test {
         escrow.payDeposit(contractId);
         
         assertEq(usdc.balanceOf(depositor), depositorBalanceBefore - totalRequired);
-        assertEq(usdc.balanceOf(address(escrow)), escrowBalanceBefore + totalRequired);
+        assertEq(usdc.balanceOf(address(escrow)), escrowBalanceBefore + DEPOSIT_AMOUNT);
+        assertEq(usdc.balanceOf(resolver), fee);
         
         DepositEscrow.DepositContract memory contract_ = escrow.getContract(contractId);
         assertEq(uint256(contract_.status), uint256(DepositEscrow.ContractStatus.ACTIVE));

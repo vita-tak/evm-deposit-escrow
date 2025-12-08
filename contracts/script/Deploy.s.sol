@@ -22,6 +22,7 @@ contract DeployDepositEscrow is Script {
         address resolver = vm.envAddress("RESOLVER_ADDRESS");
         uint256 platformFee = vm.envUint("PLATFORM_FEE");
         address usdcToken = vm.envAddress("USDC_TOKEN_ADDRESS");
+        address feeRecipient = vm.envAddress("FEE_COLLECTOR_ADDRESS");
         uint256 deployerPrivateKey = vm.envUint("DEPLOYER_PRIVATE_KEY");
         
         console.log("=================================");
@@ -30,12 +31,13 @@ contract DeployDepositEscrow is Script {
         console.log("Network: Polygon Amoy");
         console.log("Resolver:", resolver);
         console.log("Platform Fee:", platformFee);
+        console.log("Fee Collector:", feeRecipient);
         console.log("USDC Token:", usdcToken);
         console.log("");
         
         vm.startBroadcast(deployerPrivateKey);
         
-        DepositEscrow escrow = new DepositEscrow(resolver, platformFee, usdcToken);
+        DepositEscrow escrow = new DepositEscrow(resolver, platformFee, usdcToken, feeRecipient);
         
         vm.stopBroadcast();
         

@@ -66,7 +66,8 @@ contract DepositEscrow is AutomationCompatibleInterface, ReentrancyGuard, Ownabl
     uint256 public nextContractId;
     address public resolver;
     uint256 public platformFee;
-    IERC20 public immutable USDC_TOKEN; 
+    address public immutable FEE_RECIPIENT;
+    IERC20 public immutable USDC_TOKEN;
 
     uint256[] private activeContractsForAutoRelease;
     uint256[] private disputedContractsForTimeout;
@@ -86,8 +87,7 @@ contract DepositEscrow is AutomationCompatibleInterface, ReentrancyGuard, Ownabl
 
     event DepositPaid(
         uint256 indexed contractId,
-        address indexed depositor,
-        uint256 amount
+        address indexed depositor
     );
 
     event CleanExitConfirmed(
@@ -137,12 +137,13 @@ contract DepositEscrow is AutomationCompatibleInterface, ReentrancyGuard, Ownabl
         _;
     }
 
-    constructor(address _resolver, uint256 _platformFee, address _usdcToken) Ownable(msg.sender) {
+    constructor(address _resolver, uint256 _platformFee, address _usdcToken, address _feeRecipient) Ownable(msg.sender) {
         resolver = _resolver;
         platformFee = _platformFee;
         nextContractId = 1;
         USDC_TOKEN = IERC20(_usdcToken);
         forwarder = address(0);
+        FEE_RECIPIENT = _feeRecipient;
     }
 
     function createContract(address _depositor, uint256 _depositAmount, uint256 _contractStart, uint256 _contractEnd) public {
@@ -185,15 +186,18 @@ contract DepositEscrow is AutomationCompatibleInterface, ReentrancyGuard, Ownabl
         if (depositContract.status != ContractStatus.WAITING_FOR_DEPOSIT) revert InvalidStatus();
         
         uint256 fee = (depositContract.depositAmount * platformFee) / 10000;
-        uint256 totalRequired = depositContract.depositAmount + fee;
 
-        USDC_TOKEN.safeTransferFrom(msg.sender, address(this), totalRequired);
+        USDC_TOKEN.safeTransferFrom(msg.sender, address(this), depositContract.depositAmount);
+
+        if (fee > 0) {
+            USDC_TOKEN.safeTransferFrom(msg.sender, FEE_RECIPIENT, fee);
+        }
         
         depositContract.status = ContractStatus.ACTIVE;
 
         activeContractsForAutoRelease.push(_contractId);
         
-        emit DepositPaid(_contractId, msg.sender, totalRequired);
+        emit DepositPaid(_contractId, msg.sender);
     }
 
     function getContract(uint256 _contractId) public view returns (DepositContract memory) {
