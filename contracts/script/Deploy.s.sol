@@ -21,7 +21,7 @@ contract DeployDepositEscrow is Script {
     function run() external returns (DepositEscrow) {        
         address resolver = vm.envAddress("RESOLVER_ADDRESS");
         uint256 platformFee = vm.envUint("PLATFORM_FEE");
-        address usdcToken = vm.envAddress("USDC_TOKEN_ADDRESS");
+        address usdcToken = vm.envAddress("AMOY_USDC_TOKEN_ADDRESS");
         address feeRecipient = vm.envAddress("FEE_COLLECTOR_ADDRESS");
         uint256 deployerPrivateKey = vm.envUint("DEPLOYER_PRIVATE_KEY");
         
