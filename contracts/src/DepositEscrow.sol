@@ -5,9 +5,15 @@ import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import {AutomationCompatibleInterface} from "@chainlink/contracts/src/v0.8/automation/interfaces/AutomationCompatibleInterface.sol";
 
-contract DepositEscrow is ReentrancyGuard, Ownable {
+contract DepositEscrow is AutomationCompatibleInterface, ReentrancyGuard, Ownable {
     using SafeERC20 for IERC20;
+
+    enum ActionType {
+        AUTO_RELEASE,
+        DISPUTE_TIMEOUT
+    }
 
     error DepositMustBeGreaterThanZero();
     error EndMustBeAfterStart();
@@ -25,6 +31,8 @@ contract DepositEscrow is ReentrancyGuard, Ownable {
     error AlreadyResponded();
     error OnlyResolverCanDecide();
     error DisputeStillActive();
+    error OnlyForwarder();
+    error TooEarlyForAutoRelease();
 
     enum ContractStatus {
         WAITING_FOR_DEPOSIT,
@@ -62,6 +70,8 @@ contract DepositEscrow is ReentrancyGuard, Ownable {
     IERC20 public immutable USDC_TOKEN; 
     uint256 public constant GRACE_PERIOD = 7 days;
     uint256 public constant DISPUTE_RESOLUTION_TIME = 14 days;
+
+    address public forwarder;
 
     event ContractCreated(
         uint256 indexed contractId,
@@ -108,11 +118,28 @@ contract DepositEscrow is ReentrancyGuard, Ownable {
         uint256 amount
     );
 
+    event AutoReleaseExecuted(
+        uint256 indexed contractId,
+        address indexed depositor,
+        uint256 amount
+    );
+
+    event ForwarderUpdated(
+        address indexed oldForwarder,
+        address indexed newForwarder
+    );
+
+    modifier onlyForwarder() {
+        if (msg.sender != forwarder) revert OnlyForwarder();
+        _;
+    }
+
     constructor(address _resolver, uint256 _platformFee, address _usdcToken) Ownable(msg.sender) {
         resolver = _resolver;
         platformFee = _platformFee;
         nextContractId = 1;
         USDC_TOKEN = IERC20(_usdcToken);
+        forwarder = address(0);
     }
 
     function createContract(
@@ -260,4 +287,70 @@ contract DepositEscrow is ReentrancyGuard, Ownable {
         
         emit DisputeResolvedByTimeout(_contractId, contracts[_contractId].depositor, contracts[_contractId].depositAmount);
     }
+
+    function _autoReleaseDeposit(uint256 _contractId) internal {
+        DepositContract storage depositContract = contracts[_contractId];
+
+        if (depositContract.id == 0) revert ContractDoesNotExist();
+        if (depositContract.status != ContractStatus.ACTIVE) revert InvalidStatus();
+        if (block.timestamp < depositContract.autoReleaseTime) revert TooEarlyForAutoRelease();
+
+        USDC_TOKEN.safeTransfer(depositContract.depositor, depositContract.depositAmount);
+
+        depositContract.status = ContractStatus.COMPLETED;
+
+        emit AutoReleaseExecuted(_contractId, depositContract.depositor, depositContract.depositAmount);
+    }
+
+    function _resolveDisputeInternal(uint256 _contractId) internal {
+        DepositContract storage depositContract = contracts[_contractId];
+
+        if (depositContract.id == 0) revert ContractDoesNotExist();
+        if (depositContract.status != ContractStatus.DISPUTED) revert InvalidStatus();
+        if (block.timestamp < disputes[_contractId].disputeStartTime + DISPUTE_RESOLUTION_TIME) revert DisputeStillActive();
+    
+        USDC_TOKEN.safeTransfer(depositContract.depositor, depositContract.depositAmount);
+
+        depositContract.status = ContractStatus.RESOLVED;
+
+        emit DisputeResolvedByTimeout(_contractId, depositContract.depositor, depositContract.depositAmount);
+    }
+
+    function setForwarder(address _forwarder) external onlyOwner {
+        address oldForwarder = forwarder;
+        forwarder = _forwarder;
+        emit ForwarderUpdated(oldForwarder, _forwarder);
+    }
+
+    function checkUpkeep(bytes calldata)
+        external
+        view
+        override
+        returns (bool upkeepNeeded, bytes memory performData)
+    {
+        for (uint256 i = 1; i < nextContractId; i++) {
+            DepositContract storage currentContract = contracts[i];
+
+            if (currentContract.id == 0) continue;
+            if (currentContract.status == ContractStatus.ACTIVE && block.timestamp >= currentContract.autoReleaseTime) {
+                return (true, abi.encode(i, ActionType.AUTO_RELEASE));
+            }
+            if (currentContract.status == ContractStatus.DISPUTED && block.timestamp >= disputes[i].disputeStartTime + DISPUTE_RESOLUTION_TIME) {
+                return (true, abi.encode(i, ActionType.DISPUTE_TIMEOUT));
+            }
+        }
+        return (false, "");
+    }
+
+    function performUpkeep(bytes calldata performData) external override onlyForwarder nonReentrant {
+        (uint256 contractId, ActionType action) = abi.decode(performData, (uint256, ActionType));
+
+        if (action == ActionType.AUTO_RELEASE) {
+            _autoReleaseDeposit(contractId);
+        } else if (action == ActionType.DISPUTE_TIMEOUT) {
+            _resolveDisputeInternal(contractId);
+        }
+    }
+
+
 }
