@@ -37,6 +37,7 @@ contract DepositEscrow is AutomationCompatibleInterface, ReentrancyGuard, Ownabl
     error OnlyForwarder();
     error OnlyDepositorCanResolveTimeout();
     error TooEarlyForAutoRelease();
+    error ResolverUnchanged();
 
     enum ContractStatus {
         WAITING_FOR_DEPOSIT,
@@ -136,6 +137,11 @@ contract DepositEscrow is AutomationCompatibleInterface, ReentrancyGuard, Ownabl
     event ForwarderUpdated(
         address indexed oldForwarder,
         address indexed newForwarder
+    );
+
+    event ResolverUpdated(
+        address indexed oldResolver,
+        address indexed newResolver
     );
 
     modifier onlyForwarder() {
@@ -333,6 +339,16 @@ contract DepositEscrow is AutomationCompatibleInterface, ReentrancyGuard, Ownabl
         address oldForwarder = forwarder;
         forwarder = _forwarder;
         emit ForwarderUpdated(oldForwarder, _forwarder);
+    }
+
+    function setResolver(address _newResolver) external onlyOwner {
+        if (_newResolver == address(0)) revert InvalidResolverAddress();
+        if (_newResolver == address(this)) revert InvalidResolverAddress();
+        if (_newResolver == resolver) revert ResolverUnchanged();
+        
+        address oldResolver = resolver;
+        resolver = _newResolver;
+        emit ResolverUpdated(oldResolver, _newResolver);
     }
 
     function checkUpkeep(bytes calldata)
