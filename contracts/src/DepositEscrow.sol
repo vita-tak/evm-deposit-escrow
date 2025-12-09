@@ -18,6 +18,9 @@ contract DepositEscrow is AutomationCompatibleInterface, ReentrancyGuard, Ownabl
     error DepositMustBeGreaterThanZero();
     error EndMustBeAfterStart();
     error InvalidDepositorAddress();
+    error InvalidResolverAddress();
+    error InvalidUSDCAddress();
+    error InvalidFeeRecipientAddress();
     error ContractDoesNotExist();
     error OnlyDepositorCanPay();
     error InvalidStatus();
@@ -138,6 +141,10 @@ contract DepositEscrow is AutomationCompatibleInterface, ReentrancyGuard, Ownabl
     }
 
     constructor(address _resolver, uint256 _platformFee, address _usdcToken, address _feeRecipient) Ownable(msg.sender) {
+        if (_resolver == address(0)) revert InvalidResolverAddress();
+        if (_usdcToken == address(0)) revert InvalidUSDCAddress();
+        if (_feeRecipient == address(0)) revert InvalidFeeRecipientAddress();
+
         resolver = _resolver;
         platformFee = _platformFee;
         nextContractId = 1;
@@ -181,9 +188,9 @@ contract DepositEscrow is AutomationCompatibleInterface, ReentrancyGuard, Ownabl
     function payDeposit(uint256 _contractId) public nonReentrant {
         DepositContract storage depositContract = contracts[_contractId];
         
-        if (depositContract.id == 0) revert ContractDoesNotExist();
-        if (depositContract.depositor != msg.sender) revert OnlyDepositorCanPay();
-        if (depositContract.status != ContractStatus.WAITING_FOR_DEPOSIT) revert InvalidStatus();
+    if (depositContract.id == 0) revert ContractDoesNotExist();
+    if (depositContract.status != ContractStatus.WAITING_FOR_DEPOSIT) revert InvalidStatus();
+    if (depositContract.depositor != msg.sender) revert OnlyDepositorCanPay();
         
         uint256 fee = (depositContract.depositAmount * platformFee) / 10000;
 
