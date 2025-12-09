@@ -12,9 +12,12 @@ contract DepositEscrowTest is Test {
     address public resolver = address(1);
     address public beneficiary = address(2);
     address public depositor = address(3);
+    address public alice = address(4); 
     
     uint256 public constant PLATFORM_FEE = 100;
     uint256 public constant DEPOSIT_AMOUNT = 1000e6;
+
+    event ResolverUpdated(address indexed oldResolver, address indexed newResolver);
     
     function setUp() public {
         usdc = new ERC20Mock();
@@ -487,5 +490,45 @@ contract DepositEscrowTest is Test {
         
         vm.expectRevert(DepositEscrow.ContractDoesNotExist.selector);
         escrow.resolveDisputeByTimeout(999);
+    }
+
+    // ============================================
+    // setResolver Tests
+    // ============================================
+
+    function test_SetResolver_Success() public {
+        address newResolver = makeAddr("newResolver");
+        
+        vm.expectEmit(true, true, false, false);
+        emit ResolverUpdated(resolver, newResolver);
+        
+        escrow.setResolver(newResolver);
+        
+        assertEq(escrow.resolver(), newResolver);
+    }
+
+    function test_SetResolver_RevertsIfNotOwner() public {
+        address newResolver = makeAddr("newResolver");
+        
+        vm.prank(alice);
+        vm.expectRevert(abi.encodeWithSignature("OwnableUnauthorizedAccount(address)", alice));
+        escrow.setResolver(newResolver);
+    }
+
+    function test_SetResolver_RevertsIfZeroAddress() public {
+        vm.expectRevert(DepositEscrow.InvalidResolverAddress.selector);
+        escrow.setResolver(address(0));
+    }
+
+    function test_SetResolver_RevertsIfContractAddress() public {
+        vm.expectRevert(DepositEscrow.InvalidResolverAddress.selector);
+        escrow.setResolver(address(escrow));
+    }
+
+    function test_SetResolver_RevertsIfUnchanged() public {
+        address currentResolver = escrow.resolver();
+        
+        vm.expectRevert(DepositEscrow.ResolverUnchanged.selector);
+        escrow.setResolver(currentResolver);
     }
 }
