@@ -79,6 +79,7 @@ contract DepositEscrow is AutomationCompatibleInterface, ReentrancyGuard, Ownabl
     uint256 public constant GRACE_PERIOD = 7 days;
     uint256 public constant DISPUTE_RESOLUTION_TIME = 14 days;
     uint public constant DISPUTE_EXTENSION_TIME = 4 days;
+    uint256 private constant MAX_CHECKS_PER_UPKEEP = 75;
 
     address public forwarder;
 
@@ -340,7 +341,11 @@ contract DepositEscrow is AutomationCompatibleInterface, ReentrancyGuard, Ownabl
         override
         returns (bool upkeepNeeded, bytes memory performData)
     {
-        for (uint256 i = 0; i < activeContractsForAutoRelease.length; i++) {
+        uint256 autoReleaseChecks = activeContractsForAutoRelease.length > MAX_CHECKS_PER_UPKEEP
+            ? MAX_CHECKS_PER_UPKEEP
+            : activeContractsForAutoRelease.length;
+        
+        for (uint256 i = 0; i < autoReleaseChecks; i++) { 
             uint256 contractId = activeContractsForAutoRelease[i];
             DepositContract memory c = contracts[contractId];
             
@@ -348,15 +353,20 @@ contract DepositEscrow is AutomationCompatibleInterface, ReentrancyGuard, Ownabl
                 return (true, abi.encode(contractId, ActionType.AUTO_RELEASE));
             }
         }
-        for (uint256 i = 0; i < disputedContractsForTimeout.length; i++) {
+        
+        uint256 disputeChecks = disputedContractsForTimeout.length > MAX_CHECKS_PER_UPKEEP
+            ? MAX_CHECKS_PER_UPKEEP
+            : disputedContractsForTimeout.length;
+        
+        for (uint256 i = 0; i < disputeChecks; i++) {
             uint256 contractId = disputedContractsForTimeout[i];
-
             uint256 requiredTime = _getDisputeRequiredTime(contractId);
             
             if (block.timestamp >= requiredTime) {
                 return (true, abi.encode(contractId, ActionType.DISPUTE_TIMEOUT));
             }
         }
+        
         return (false, "");
     }
 
