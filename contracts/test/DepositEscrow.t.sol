@@ -453,6 +453,7 @@ contract DepositEscrowTest is Test {
         
         uint256 depositorBalanceBefore = usdc.balanceOf(depositor);
         
+        vm.prank(depositor); 
         escrow.resolveDisputeByTimeout(contractId);
         
         assertEq(usdc.balanceOf(depositor), depositorBalanceBefore + DEPOSIT_AMOUNT);
@@ -466,6 +467,7 @@ contract DepositEscrowTest is Test {
         
         vm.warp(block.timestamp + 13 days);
         
+        vm.prank(depositor);
         vm.expectRevert(DepositEscrow.DisputeStillActive.selector);
         escrow.resolveDisputeByTimeout(contractId);
     }
@@ -475,6 +477,7 @@ contract DepositEscrowTest is Test {
         
         vm.warp(block.timestamp + 14 days + 1);
         
+        vm.prank(depositor);
         vm.expectRevert(DepositEscrow.InvalidStatus.selector);
         escrow.resolveDisputeByTimeout(contractId);
     }

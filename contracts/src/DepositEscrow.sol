@@ -30,11 +30,12 @@ contract DepositEscrow is AutomationCompatibleInterface, ReentrancyGuard, Ownabl
     error TransferFailed();
     error OnlyBeneficiaryCanRaiseDispute();
     error AmountExceedsDeposit();
-    error OnlyDepositorCanRespond(); 
+    error OnlyDepositorCanRespond();
     error AlreadyResponded();
     error OnlyResolverCanDecide();
     error DisputeStillActive();
     error OnlyForwarder();
+    error OnlyDepositorCanResolveTimeout();
     error TooEarlyForAutoRelease();
 
     enum ContractStatus {
@@ -77,6 +78,7 @@ contract DepositEscrow is AutomationCompatibleInterface, ReentrancyGuard, Ownabl
 
     uint256 public constant GRACE_PERIOD = 7 days;
     uint256 public constant DISPUTE_RESOLUTION_TIME = 14 days;
+    uint public constant DISPUTE_EXTENSION_TIME = 4 days;
 
     address public forwarder;
 
@@ -279,7 +281,12 @@ contract DepositEscrow is AutomationCompatibleInterface, ReentrancyGuard, Ownabl
     function resolveDisputeByTimeout(uint256 _contractId) public nonReentrant {
         DepositContract storage depositContract = contracts[_contractId];
 
-        if (block.timestamp < disputes[_contractId].disputeStartTime + DISPUTE_RESOLUTION_TIME) {
+        if (depositContract.id == 0) revert ContractDoesNotExist();
+        if (msg.sender != depositContract.depositor) revert OnlyDepositorCanResolveTimeout();
+        if (depositContract.status != ContractStatus.DISPUTED) revert InvalidStatus();
+        
+        uint256 requiredTime = _getDisputeRequiredTime(_contractId);
+        if (block.timestamp < requiredTime) {
             revert DisputeStillActive();
         }
         
@@ -307,9 +314,8 @@ contract DepositEscrow is AutomationCompatibleInterface, ReentrancyGuard, Ownabl
         if (depositContract.id == 0) revert ContractDoesNotExist();
         if (depositContract.status != ContractStatus.ACTIVE) revert InvalidStatus();
         
-        USDC_TOKEN.safeTransfer(depositContract.depositor, depositContract.depositAmount);
-        
         depositContract.status = ContractStatus.COMPLETED;
+        USDC_TOKEN.safeTransfer(depositContract.depositor, depositContract.depositAmount);
     }
 
     function _resolveDisputeToDepositor(uint256 _contractId) internal {
@@ -317,10 +323,9 @@ contract DepositEscrow is AutomationCompatibleInterface, ReentrancyGuard, Ownabl
         
         if (depositContract.id == 0) revert ContractDoesNotExist();
         if (depositContract.status != ContractStatus.DISPUTED) revert InvalidStatus();
-        
-        USDC_TOKEN.safeTransfer(depositContract.depositor, depositContract.depositAmount);
-        
+                
         depositContract.status = ContractStatus.RESOLVED;
+        USDC_TOKEN.safeTransfer(depositContract.depositor, depositContract.depositAmount);
     }
 
     function setForwarder(address _forwarder) external onlyOwner {
@@ -345,9 +350,10 @@ contract DepositEscrow is AutomationCompatibleInterface, ReentrancyGuard, Ownabl
         }
         for (uint256 i = 0; i < disputedContractsForTimeout.length; i++) {
             uint256 contractId = disputedContractsForTimeout[i];
-            Dispute memory d = disputes[contractId];
+
+            uint256 requiredTime = _getDisputeRequiredTime(contractId);
             
-            if (block.timestamp >= d.disputeStartTime + DISPUTE_RESOLUTION_TIME) {
+            if (block.timestamp >= requiredTime) {
                 return (true, abi.encode(contractId, ActionType.DISPUTE_TIMEOUT));
             }
         }
@@ -356,7 +362,7 @@ contract DepositEscrow is AutomationCompatibleInterface, ReentrancyGuard, Ownabl
 
     function performUpkeep(bytes calldata performData) external override onlyForwarder nonReentrant {
         (uint256 contractId, ActionType action) = abi.decode(performData, (uint256, ActionType));
-        DepositContract storage depositContract = contracts[contractId]; 
+        DepositContract storage depositContract = contracts[contractId];
 
         if (action == ActionType.AUTO_RELEASE) {
             if (block.timestamp < depositContract.autoReleaseTime) {
@@ -369,7 +375,10 @@ contract DepositEscrow is AutomationCompatibleInterface, ReentrancyGuard, Ownabl
             emit AutoReleaseExecuted(contractId, depositContract.depositor, depositContract.depositAmount);
             
         } else if (action == ActionType.DISPUTE_TIMEOUT) {
-            if (block.timestamp < disputes[contractId].disputeStartTime + DISPUTE_RESOLUTION_TIME) {
+
+            uint256 requiredTime = _getDisputeRequiredTime(contractId);
+            
+            if (block.timestamp < requiredTime) {
                 revert DisputeStillActive();
             }
 
@@ -387,6 +396,16 @@ contract DepositEscrow is AutomationCompatibleInterface, ReentrancyGuard, Ownabl
                 array.pop();
                 return;
             }
+        }
+    }
+
+    function _getDisputeRequiredTime(uint256 _contractId) internal view returns (uint256) {
+        Dispute memory dispute = disputes[_contractId];
+        
+        if (dispute.depositorResponded) {
+            return dispute.disputeStartTime + DISPUTE_RESOLUTION_TIME + DISPUTE_EXTENSION_TIME;
+        } else {
+            return dispute.disputeStartTime + DISPUTE_RESOLUTION_TIME;
         }
     }
 }
