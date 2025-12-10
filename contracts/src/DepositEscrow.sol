@@ -38,6 +38,7 @@ contract DepositEscrow is AutomationCompatibleInterface, ReentrancyGuard, Ownabl
     error OnlyDepositorCanResolveTimeout();
     error TooEarlyForAutoRelease();
     error ResolverUnchanged();
+    error FeeRecipientUnchanged();
 
     enum ContractStatus {
         WAITING_FOR_DEPOSIT,
@@ -71,7 +72,7 @@ contract DepositEscrow is AutomationCompatibleInterface, ReentrancyGuard, Ownabl
     uint256 public nextContractId;
     address public resolver;
     uint256 public platformFee;
-    address public immutable FEE_RECIPIENT;
+    address public feeRecipient;
     IERC20 public immutable USDC_TOKEN;
 
     uint256[] private activeContractsForAutoRelease;
@@ -144,6 +145,10 @@ contract DepositEscrow is AutomationCompatibleInterface, ReentrancyGuard, Ownabl
         address indexed newResolver
     );
 
+    event FeeRecipientUpdated(
+        address indexed oldFeeRecipient,
+        address indexed newFeeRecipient);
+
     modifier onlyForwarder() {
         if (msg.sender != forwarder) revert OnlyForwarder();
         _;
@@ -159,7 +164,7 @@ contract DepositEscrow is AutomationCompatibleInterface, ReentrancyGuard, Ownabl
         nextContractId = 1;
         USDC_TOKEN = IERC20(_usdcToken);
         forwarder = address(0);
-        FEE_RECIPIENT = _feeRecipient;
+        feeRecipient = _feeRecipient;
     }
 
     function createContract(address _depositor, uint256 _depositAmount, uint256 _contractStart, uint256 _contractEnd) public {
@@ -206,7 +211,7 @@ contract DepositEscrow is AutomationCompatibleInterface, ReentrancyGuard, Ownabl
         USDC_TOKEN.safeTransferFrom(msg.sender, address(this), depositContract.depositAmount);
 
         if (fee > 0) {
-            USDC_TOKEN.safeTransferFrom(msg.sender, FEE_RECIPIENT, fee);
+            USDC_TOKEN.safeTransferFrom(msg.sender, feeRecipient, fee);
         }
         
         depositContract.status = ContractStatus.ACTIVE;
@@ -345,10 +350,20 @@ contract DepositEscrow is AutomationCompatibleInterface, ReentrancyGuard, Ownabl
         if (_newResolver == address(0)) revert InvalidResolverAddress();
         if (_newResolver == address(this)) revert InvalidResolverAddress();
         if (_newResolver == resolver) revert ResolverUnchanged();
-        
+
         address oldResolver = resolver;
         resolver = _newResolver;
         emit ResolverUpdated(oldResolver, _newResolver);
+    }
+
+    function setFeeRecipient(address _newFeeRecipient) external onlyOwner {
+        if (_newFeeRecipient == address(0)) revert InvalidFeeRecipientAddress();
+        if (_newFeeRecipient == address(this)) revert InvalidFeeRecipientAddress();
+        if (_newFeeRecipient == feeRecipient) revert FeeRecipientUnchanged();
+        
+        address oldFeeRecipient = feeRecipient;
+        feeRecipient = _newFeeRecipient;
+        emit FeeRecipientUpdated(oldFeeRecipient, _newFeeRecipient);
     }
 
     function checkUpkeep(bytes calldata)
