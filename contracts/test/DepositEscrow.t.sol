@@ -572,4 +572,111 @@ contract DepositEscrowTest is Test {
         vm.expectRevert(DepositEscrow.FeeRecipientUnchanged.selector);
         escrow.setFeeRecipient(currentFeeRecipient);
     }
+
+    // ============================================
+    // rescueTokens Tests
+    // ============================================
+
+    function test_RescueTokens_Success() public {
+        // Simulate someone accidentally sending USDC to contract
+        usdc.mint(address(escrow), 1000e6);
+        
+        uint256 ownerBalanceBefore = usdc.balanceOf(address(this));
+        
+        escrow.rescueTokens(address(usdc), 1000e6);
+        
+        assertEq(usdc.balanceOf(address(this)), ownerBalanceBefore + 1000e6);
+        assertEq(usdc.balanceOf(address(escrow)), 0);
+    }
+
+    function test_RescueTokens_RevertsIfNotOwner() public {
+        usdc.mint(address(escrow), 1000e6);
+        
+        vm.prank(alice);
+        vm.expectRevert(abi.encodeWithSignature("OwnableUnauthorizedAccount(address)", alice));
+        escrow.rescueTokens(address(usdc), 1000e6);
+    }
+
+    function test_RescueTokens_RevertsIfZeroAddress() public {
+        vm.expectRevert(DepositEscrow.InvalidUSDCAddress.selector);
+        escrow.rescueTokens(address(0), 1000e6);
+    }
+
+    // ============================================
+    // Pausable Tests
+    // ============================================
+
+    function test_Pause_Success() public {
+        escrow.pause();
+        assertTrue(escrow.paused());
+    }
+
+    function test_Unpause_Success() public {
+        escrow.pause();
+        escrow.unpause();
+        assertFalse(escrow.paused());
+    }
+
+    function test_Pause_RevertsIfNotOwner() public {
+        vm.prank(alice);
+        vm.expectRevert(abi.encodeWithSignature("OwnableUnauthorizedAccount(address)", alice));
+        escrow.pause();
+    }
+
+    function test_CreateContract_RevertsWhenPaused() public {
+        escrow.pause();
+        
+        uint256 start = block.timestamp;
+        uint256 end = start + 30 days;
+        
+        vm.prank(beneficiary);
+        vm.expectRevert(abi.encodeWithSignature("EnforcedPause()"));
+        escrow.createContract(depositor, DEPOSIT_AMOUNT, start, end);
+    }
+
+    function test_PayDeposit_RevertsWhenPaused() public {
+        uint256 contractId = _createTestContract();
+        
+        escrow.pause();
+        
+        vm.prank(depositor);
+        vm.expectRevert(abi.encodeWithSignature("EnforcedPause()"));
+        escrow.payDeposit(contractId);
+    }
+
+    function test_RaiseDispute_RevertsWhenPaused() public {
+        uint256 contractId = _createPayAndEndContract();
+        
+        escrow.pause();
+        
+        vm.prank(beneficiary);
+        vm.expectRevert(abi.encodeWithSignature("EnforcedPause()"));
+        escrow.raiseDispute(contractId, 300e6, "QmTest");
+    }
+
+    function test_RespondToDispute_RevertsWhenPaused() public {
+        uint256 contractId = _createAndRaiseDispute();
+        
+        escrow.pause();
+        
+        vm.prank(depositor);
+        vm.expectRevert(abi.encodeWithSignature("EnforcedPause()"));
+        escrow.respondToDispute(contractId, "QmResponse");
+    }
+
+    function test_ConfirmCleanExit_WorksWhenPaused() public {
+        uint256 contractId = _createAndPayContract();
+        
+        DepositEscrow.DepositContract memory contract_ = escrow.getContract(contractId);
+        vm.warp(contract_.contractEnd + 1);
+        
+        escrow.pause();
+        
+        // Should still work! ✅
+        vm.prank(beneficiary);
+        escrow.confirmCleanExit(contractId);
+        
+        contract_ = escrow.getContract(contractId);
+        assertEq(uint256(contract_.status), uint256(DepositEscrow.ContractStatus.COMPLETED));
+    }
 }
