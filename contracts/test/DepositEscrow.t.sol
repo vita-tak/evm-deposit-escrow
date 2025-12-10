@@ -18,6 +18,7 @@ contract DepositEscrowTest is Test {
     uint256 public constant DEPOSIT_AMOUNT = 1000e6;
 
     event ResolverUpdated(address indexed oldResolver, address indexed newResolver);
+    event FeeRecipientUpdated(address indexed oldFeeRecipient, address indexed newFeeRecipient);
     
     function setUp() public {
         usdc = new ERC20Mock();
@@ -530,5 +531,45 @@ contract DepositEscrowTest is Test {
         
         vm.expectRevert(DepositEscrow.ResolverUnchanged.selector);
         escrow.setResolver(currentResolver);
+    }
+
+    // ============================================
+    // setFeeRecipient Tests
+    // ============================================
+
+    function test_SetFeeRecipient_Success() public {
+        address newFeeRecipient = makeAddr("newFeeRecipient");
+        
+        vm.expectEmit(true, true, false, false);
+        emit FeeRecipientUpdated(resolver, newFeeRecipient);
+        
+        escrow.setFeeRecipient(newFeeRecipient);
+        
+        assertEq(escrow.feeRecipient(), newFeeRecipient);
+    }
+
+    function test_SetFeeRecipient_RevertsIfNotOwner() public {
+        address newFeeRecipient = makeAddr("newFeeRecipient");
+        
+        vm.prank(alice);
+        vm.expectRevert(abi.encodeWithSignature("OwnableUnauthorizedAccount(address)", alice));
+        escrow.setFeeRecipient(newFeeRecipient);
+    }
+
+    function test_SetFeeRecipient_RevertsIfZeroAddress() public {
+        vm.expectRevert(DepositEscrow.InvalidFeeRecipientAddress.selector);
+        escrow.setFeeRecipient(address(0));
+    }
+
+    function test_SetFeeRecipient_RevertsIfContractAddress() public {
+        vm.expectRevert(DepositEscrow.InvalidFeeRecipientAddress.selector);
+        escrow.setFeeRecipient(address(escrow));
+    }
+
+    function test_SetFeeRecipient_RevertsIfUnchanged() public {
+        address currentFeeRecipient = escrow.feeRecipient();
+        
+        vm.expectRevert(DepositEscrow.FeeRecipientUnchanged.selector);
+        escrow.setFeeRecipient(currentFeeRecipient);
     }
 }
