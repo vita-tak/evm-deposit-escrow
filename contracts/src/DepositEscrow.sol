@@ -3,11 +3,12 @@ pragma solidity 0.8.30;
 
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
+import {Pausable} from "@openzeppelin/contracts/utils/Pausable.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {AutomationCompatibleInterface} from "@chainlink/contracts/src/v0.8/automation/interfaces/AutomationCompatibleInterface.sol";
 
-contract DepositEscrow is AutomationCompatibleInterface, ReentrancyGuard, Ownable {
+contract DepositEscrow is AutomationCompatibleInterface, ReentrancyGuard, Ownable, Pausable {
     using SafeERC20 for IERC20;
 
     enum ActionType {
@@ -158,6 +159,8 @@ contract DepositEscrow is AutomationCompatibleInterface, ReentrancyGuard, Ownabl
         if (_resolver == address(0)) revert InvalidResolverAddress();
         if (_usdcToken == address(0)) revert InvalidUSDCAddress();
         if (_feeRecipient == address(0)) revert InvalidFeeRecipientAddress();
+        if (_feeRecipient == address(this)) revert InvalidFeeRecipientAddress();
+        if (_resolver == address(this)) revert InvalidResolverAddress();
 
         resolver = _resolver;
         platformFee = _platformFee;
@@ -167,7 +170,7 @@ contract DepositEscrow is AutomationCompatibleInterface, ReentrancyGuard, Ownabl
         feeRecipient = _feeRecipient;
     }
 
-    function createContract(address _depositor, uint256 _depositAmount, uint256 _contractStart, uint256 _contractEnd) public {
+    function createContract(address _depositor, uint256 _depositAmount, uint256 _contractStart, uint256 _contractEnd) public whenNotPaused {
         if (_depositAmount == 0) revert DepositMustBeGreaterThanZero();
         if (_contractEnd <= _contractStart) revert EndMustBeAfterStart();
         if (_depositor == address(0)) revert InvalidDepositorAddress();
@@ -199,24 +202,22 @@ contract DepositEscrow is AutomationCompatibleInterface, ReentrancyGuard, Ownabl
         }
     }
 
-    function payDeposit(uint256 _contractId) public nonReentrant {
+    function payDeposit(uint256 _contractId) public nonReentrant whenNotPaused {
         DepositContract storage depositContract = contracts[_contractId];
         
-    if (depositContract.id == 0) revert ContractDoesNotExist();
-    if (depositContract.status != ContractStatus.WAITING_FOR_DEPOSIT) revert InvalidStatus();
-    if (depositContract.depositor != msg.sender) revert OnlyDepositorCanPay();
+        if (depositContract.id == 0) revert ContractDoesNotExist();
+        if (depositContract.status != ContractStatus.WAITING_FOR_DEPOSIT) revert InvalidStatus();
+        if (depositContract.depositor != msg.sender) revert OnlyDepositorCanPay();
         
         uint256 fee = (depositContract.depositAmount * platformFee) / 10000;
 
-        USDC_TOKEN.safeTransferFrom(msg.sender, address(this), depositContract.depositAmount);
+        depositContract.status = ContractStatus.ACTIVE;
+        activeContractsForAutoRelease.push(_contractId);
 
+        USDC_TOKEN.safeTransferFrom(msg.sender, address(this), depositContract.depositAmount);
         if (fee > 0) {
             USDC_TOKEN.safeTransferFrom(msg.sender, feeRecipient, fee);
         }
-        
-        depositContract.status = ContractStatus.ACTIVE;
-
-        activeContractsForAutoRelease.push(_contractId);
         
         emit DepositPaid(_contractId, msg.sender);
     }
@@ -230,7 +231,7 @@ contract DepositEscrow is AutomationCompatibleInterface, ReentrancyGuard, Ownabl
         uint256 _contractId, 
         uint256 _claimedAmount, 
         string memory _evidenceHash
-    ) public {
+    ) public whenNotPaused {
         DepositContract storage depositContract = contracts[_contractId];
 
         if (depositContract.id == 0) revert ContractDoesNotExist();
@@ -256,7 +257,7 @@ contract DepositEscrow is AutomationCompatibleInterface, ReentrancyGuard, Ownabl
         emit DisputeRaised(_contractId, msg.sender, _claimedAmount, _evidenceHash);
     }
 
-    function respondToDispute(uint256 _contractId, string memory _responseHash) public {
+    function respondToDispute(uint256 _contractId, string memory _responseHash) public whenNotPaused {
         DepositContract storage depositContract = contracts[_contractId];
 
         if (depositContract.id == 0) revert ContractDoesNotExist();
@@ -364,6 +365,19 @@ contract DepositEscrow is AutomationCompatibleInterface, ReentrancyGuard, Ownabl
         address oldFeeRecipient = feeRecipient;
         feeRecipient = _newFeeRecipient;
         emit FeeRecipientUpdated(oldFeeRecipient, _newFeeRecipient);
+    }
+
+    function rescueTokens(address _token, uint256 _amount) external onlyOwner {
+        if (_token == address(0)) revert InvalidUSDCAddress();
+        IERC20(_token).safeTransfer(owner(), _amount);
+    }
+
+    function pause() external onlyOwner {
+        _pause();
+    }
+
+    function unpause() external onlyOwner {
+        _unpause();
     }
 
     function checkUpkeep(bytes calldata)
