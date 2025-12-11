@@ -40,6 +40,7 @@ contract DepositEscrow is AutomationCompatibleInterface, ReentrancyGuard, Ownabl
     error TooEarlyForAutoRelease();
     error ResolverUnchanged();
     error FeeRecipientUnchanged();
+    error FeeTooHigh();
 
     enum ContractStatus {
         WAITING_FOR_DEPOSIT,
@@ -74,6 +75,7 @@ contract DepositEscrow is AutomationCompatibleInterface, ReentrancyGuard, Ownabl
     address public resolver;
     uint256 public platformFee;
     address public feeRecipient;
+    uint256 public constant MAX_PLATFORM_FEE = 1000;
     IERC20 public immutable USDC_TOKEN;
 
     uint256[] private activeContractsForAutoRelease;
@@ -161,6 +163,7 @@ contract DepositEscrow is AutomationCompatibleInterface, ReentrancyGuard, Ownabl
         if (_feeRecipient == address(0)) revert InvalidFeeRecipientAddress();
         if (_feeRecipient == address(this)) revert InvalidFeeRecipientAddress();
         if (_resolver == address(this)) revert InvalidResolverAddress();
+        if (_platformFee > MAX_PLATFORM_FEE) revert FeeTooHigh();
 
         resolver = _resolver;
         platformFee = _platformFee;
