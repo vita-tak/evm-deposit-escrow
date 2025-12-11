@@ -19,13 +19,13 @@ contract ChainlinkAutomationTest is Test {
     uint256 constant DEPOSIT_AMOUNT = 1000e6;
     
     event AutoReleaseExecuted(
-        uint256 indexed contractId,
+        uint256 indexed depositId,
         address indexed depositor,
         uint256 amount
     );
     
     event DisputeResolvedByTimeout(
-        uint256 indexed contractId,
+        uint256 indexed depositId,
         address indexed depositor,
         uint256 amount
     );
@@ -49,11 +49,11 @@ contract ChainlinkAutomationTest is Test {
         escrow.setForwarder(forwarder);
     }
 
-    function _createAndFundContract() internal returns (uint256) {
-        uint256 contractId = escrow.nextContractId();
+    function _createAndFundDeposit() internal returns (uint256) {
+        uint256 depositId = escrow.nextDepositId();
         
         vm.prank(beneficiary);
-        escrow.createContract(
+        escrow.createDeposit(
             depositor,
             DEPOSIT_AMOUNT,
             block.timestamp,
@@ -62,10 +62,10 @@ contract ChainlinkAutomationTest is Test {
         
         vm.startPrank(depositor);
         usdc.approve(address(escrow), DEPOSIT_AMOUNT + (DEPOSIT_AMOUNT * PLATFORM_FEE / 10000));
-        escrow.payDeposit(contractId);
+        escrow.payDeposit(depositId);
         vm.stopPrank();
         
-        return contractId;
+        return depositId;
     }
     
     function test_SetForwarder_Success() public {
@@ -87,7 +87,7 @@ contract ChainlinkAutomationTest is Test {
         escrow.setForwarder(newForwarder);
     }
     
-    function test_CheckUpkeep_ReturnsFalseWhenNoContracts() public view {
+    function test_CheckUpkeep_ReturnsFalseWhenNoDeposits() public view {
         (bool upkeepNeeded, bytes memory performData) = escrow.checkUpkeep("");
         
         assertFalse(upkeepNeeded);
@@ -95,7 +95,7 @@ contract ChainlinkAutomationTest is Test {
     }
     
     function test_CheckUpkeep_ReturnsFalseBeforeAutoReleaseTime() public {
-        _createAndFundContract();
+        _createAndFundDeposit();
         
         (bool upkeepNeeded, ) = escrow.checkUpkeep("");
         assertFalse(upkeepNeeded);
@@ -105,12 +105,12 @@ contract ChainlinkAutomationTest is Test {
         assertFalse(upkeepNeeded2);
     }
     
-    function test_CheckUpkeep_ReturnsFalseForCompletedContract() public {
-        uint256 contractId = _createAndFundContract();
+    function test_CheckUpkeep_ReturnsFalseForCompletedDeposit() public {
+        uint256 depositId = _createAndFundDeposit();
         
         vm.warp(block.timestamp + 30 days);
         vm.prank(beneficiary);
-        escrow.confirmCleanExit(contractId);
+        escrow.confirmCleanExit(depositId);
         
         vm.warp(block.timestamp + 7 days);
         (bool upkeepNeeded, ) = escrow.checkUpkeep("");
@@ -118,7 +118,7 @@ contract ChainlinkAutomationTest is Test {
     }
     
     function test_CheckUpkeep_ReturnsTrueForAutoRelease() public {
-        uint256 contractId = _createAndFundContract();
+        uint256 depositId = _createAndFundDeposit();
         
         vm.warp(block.timestamp + 37 days);
         
@@ -131,19 +131,19 @@ contract ChainlinkAutomationTest is Test {
             (uint256, DepositEscrow.ActionType)
         );
         
-        assertEq(returnedId, contractId);
+        assertEq(returnedId, depositId);
         assertEq(uint8(action), uint8(DepositEscrow.ActionType.AUTO_RELEASE));
     }
     
-    function test_CheckUpkeep_ReturnsFirstContractNeedingAutoRelease() public {
-        uint256 contractId1 = _createAndFundContract();
-        uint256 contractId2 = _createAndFundContract();
-        uint256 contractId3 = _createAndFundContract();
+    function test_CheckUpkeep_ReturnsFirstDepositNeedingAutoRelease() public {
+        uint256 depositId1 = _createAndFundDeposit();
+        uint256 depositId2 = _createAndFundDeposit();
+        uint256 depositId3 = _createAndFundDeposit();
         
         vm.warp(block.timestamp + 30 days);
         vm.startPrank(beneficiary);
-        escrow.confirmCleanExit(contractId1);
-        escrow.confirmCleanExit(contractId3);
+        escrow.confirmCleanExit(depositId1);
+        escrow.confirmCleanExit(depositId3);
         vm.stopPrank();
         
         vm.warp(block.timestamp + 7 days);
@@ -153,15 +153,15 @@ contract ChainlinkAutomationTest is Test {
         assertTrue(upkeepNeeded);
         
         (uint256 returnedId, ) = abi.decode(performData, (uint256, DepositEscrow.ActionType));
-        assertEq(returnedId, contractId2);
+        assertEq(returnedId, depositId2);
     }
     
     function test_CheckUpkeep_ReturnsTrueForDisputeTimeout() public {
-        uint256 contractId = _createAndFundContract();
+        uint256 depositId = _createAndFundDeposit();
         
         vm.warp(block.timestamp + 31 days);
         vm.prank(beneficiary);
-        escrow.raiseDispute(contractId, 500e6, "ipfs://evidence");
+        escrow.raiseDispute(depositId, 500e6, "ipfs://evidence");
         
         (bool upkeepNeeded, ) = escrow.checkUpkeep("");
         assertFalse(upkeepNeeded);
@@ -177,12 +177,12 @@ contract ChainlinkAutomationTest is Test {
             (uint256, DepositEscrow.ActionType)
         );
         
-        assertEq(returnedId, contractId);
+        assertEq(returnedId, depositId);
         assertEq(uint8(action), uint8(DepositEscrow.ActionType.DISPUTE_TIMEOUT));
     }
     
     function test_PerformUpkeep_AutoRelease_Success() public {
-        uint256 contractId = _createAndFundContract();
+        uint256 depositId = _createAndFundDeposit();
         
         uint256 depositorBalanceBefore = usdc.balanceOf(depositor);
         
@@ -191,19 +191,19 @@ contract ChainlinkAutomationTest is Test {
         (, bytes memory performData) = escrow.checkUpkeep("");
         
         vm.expectEmit(true, true, false, true);
-        emit AutoReleaseExecuted(contractId, depositor, DEPOSIT_AMOUNT);
+        emit AutoReleaseExecuted(depositId, depositor, DEPOSIT_AMOUNT);
         
         vm.prank(forwarder);
         escrow.performUpkeep(performData);
         
         assertEq(usdc.balanceOf(depositor), depositorBalanceBefore + DEPOSIT_AMOUNT);
         
-        DepositEscrow.DepositContract memory contractData = escrow.getContract(contractId);
-        assertEq(uint8(contractData.status), uint8(DepositEscrow.ContractStatus.COMPLETED));
+        DepositEscrow.Deposit memory depositData = escrow.getDeposit(depositId);
+        assertEq(uint8(depositData.status), uint8(DepositEscrow.DepositStatus.COMPLETED));
     }
     
     function test_PerformUpkeep_AutoRelease_RevertsIfNotForwarder() public {
-        _createAndFundContract();
+        _createAndFundDeposit();
         
         vm.warp(block.timestamp + 37 days);
         (, bytes memory performData) = escrow.checkUpkeep("");
@@ -214,9 +214,9 @@ contract ChainlinkAutomationTest is Test {
     }
     
     function test_PerformUpkeep_AutoRelease_RevertsIfTooEarly() public {
-        uint256 contractId = _createAndFundContract();
+        uint256 depositId = _createAndFundDeposit();
         
-        bytes memory performData = abi.encode(contractId, DepositEscrow.ActionType.AUTO_RELEASE);
+        bytes memory performData = abi.encode(depositId, DepositEscrow.ActionType.AUTO_RELEASE);
         
         vm.warp(block.timestamp + 36 days);
         
@@ -226,11 +226,11 @@ contract ChainlinkAutomationTest is Test {
     }
     
     function test_PerformUpkeep_DisputeTimeout_Success() public {
-        uint256 contractId = _createAndFundContract();
+        uint256 depositId = _createAndFundDeposit();
         
         vm.warp(block.timestamp + 31 days);
         vm.prank(beneficiary);
-        escrow.raiseDispute(contractId, 500e6, "ipfs://evidence");
+        escrow.raiseDispute(depositId, 500e6, "ipfs://evidence");
         
         uint256 depositorBalanceBefore = usdc.balanceOf(depositor);
         
@@ -239,25 +239,25 @@ contract ChainlinkAutomationTest is Test {
         (, bytes memory performData) = escrow.checkUpkeep("");
         
         vm.expectEmit(true, true, false, true);
-        emit DisputeResolvedByTimeout(contractId, depositor, DEPOSIT_AMOUNT);
+        emit DisputeResolvedByTimeout(depositId, depositor, DEPOSIT_AMOUNT);
         
         vm.prank(forwarder);
         escrow.performUpkeep(performData);
         
         assertEq(usdc.balanceOf(depositor), depositorBalanceBefore + DEPOSIT_AMOUNT);
         
-        DepositEscrow.DepositContract memory contractData = escrow.getContract(contractId);
-        assertEq(uint8(contractData.status), uint8(DepositEscrow.ContractStatus.RESOLVED));
+        DepositEscrow.Deposit memory depositData = escrow.getDeposit(depositId);
+        assertEq(uint8(depositData.status), uint8(DepositEscrow.DepositStatus.RESOLVED));
     }
     
     function test_PerformUpkeep_DisputeTimeout_RevertsIfTooEarly() public {
-        uint256 contractId = _createAndFundContract();
+        uint256 depositId = _createAndFundDeposit();
         
         vm.warp(block.timestamp + 31 days);
         vm.prank(beneficiary);
-        escrow.raiseDispute(contractId, 500e6, "ipfs://evidence");
+        escrow.raiseDispute(depositId, 500e6, "ipfs://evidence");
         
-        bytes memory performData = abi.encode(contractId, DepositEscrow.ActionType.DISPUTE_TIMEOUT);
+        bytes memory performData = abi.encode(depositId, DepositEscrow.ActionType.DISPUTE_TIMEOUT);
         
         vm.warp(block.timestamp + 13 days);
         
@@ -266,13 +266,13 @@ contract ChainlinkAutomationTest is Test {
         escrow.performUpkeep(performData);
     }
     
-    function test_CheckUpkeep_SkipsNonExistentContracts() public view {
+    function test_CheckUpkeep_SkipsNonExistentDeposits() public view {
         (bool upkeepNeeded, ) = escrow.checkUpkeep("");
         assertFalse(upkeepNeeded);
     }
     
     function test_PerformUpkeep_AutoRelease_ExactlyAtAutoReleaseTime() public {
-        uint256 contractId = _createAndFundContract();
+        uint256 depositId = _createAndFundDeposit();
         
         vm.warp(block.timestamp + 37 days);
         
@@ -282,7 +282,7 @@ contract ChainlinkAutomationTest is Test {
         vm.prank(forwarder);
         escrow.performUpkeep(performData);
         
-        DepositEscrow.DepositContract memory contractData = escrow.getContract(contractId);
-        assertEq(uint8(contractData.status), uint8(DepositEscrow.ContractStatus.COMPLETED));
+        DepositEscrow.Deposit memory depositData = escrow.getDeposit(depositId);
+        assertEq(uint8(depositData.status), uint8(DepositEscrow.DepositStatus.COMPLETED));
     }
 }

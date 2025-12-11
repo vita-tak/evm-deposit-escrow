@@ -16,36 +16,36 @@ contract DepositEscrow is AutomationCompatibleInterface, ReentrancyGuard, Ownabl
         DISPUTE_TIMEOUT
     }
 
-error AmountExceedsDeposit();
-error DepositMustBeGreaterThanZero();
-error EndMustBeAfterStart();
-error FeeTooHigh();
-error IncorrectAmount();
+    error AmountExceedsDeposit();
+    error DepositMustBeGreaterThanZero();
+    error EndMustBeAfterStart();
+    error FeeTooHigh();
+    error IncorrectAmount();
 
-error InvalidDepositorAddress();
-error InvalidFeeRecipientAddress();
-error InvalidResolverAddress();
-error InvalidUSDCAddress();
-error ResolverUnchanged();
-error FeeRecipientUnchanged();
+    error InvalidDepositorAddress();
+    error InvalidFeeRecipientAddress();
+    error InvalidResolverAddress();
+    error InvalidUSDCAddress();
+    error ResolverUnchanged();
+    error FeeRecipientUnchanged();
 
-error AlreadyResponded();
-error ContractDoesNotExist();
-error ContractPeriodNotEnded();
-error DisputeStillActive();
-error InvalidStatus();
-error TooEarlyForAutoRelease();
-error TransferFailed();
+    error AlreadyResponded();
+    error DepositDoesNotExist();
+    error PeriodNotEnded();
+    error DisputeStillActive();
+    error InvalidStatus();
+    error TooEarlyForAutoRelease();
+    error TransferFailed();
 
-error OnlyBeneficiaryCanConfirm();
-error OnlyBeneficiaryCanRaiseDispute();
-error OnlyDepositorCanPay();
-error OnlyDepositorCanRespond();
-error OnlyDepositorCanResolveTimeout();
-error OnlyForwarder();
-error OnlyResolverCanDecide();
+    error OnlyBeneficiaryCanConfirm();
+    error OnlyBeneficiaryCanRaiseDispute();
+    error OnlyDepositorCanPay();
+    error OnlyDepositorCanRespond();
+    error OnlyDepositorCanResolveTimeout();
+    error OnlyForwarder();
+    error OnlyResolverCanDecide();
 
-    enum ContractStatus {
+    enum DepositStatus {
         WAITING_FOR_DEPOSIT,
         ACTIVE,
         COMPLETED,
@@ -53,14 +53,14 @@ error OnlyResolverCanDecide();
         RESOLVED
     }
 
-    struct DepositContract {
+    struct Deposit {
         address depositor;       
-        ContractStatus status;   
+        DepositStatus status; 
         address beneficiary;    
         uint256 id;             
         uint256 depositAmount;  
-        uint256 contractStart;  
-        uint256 contractEnd;     
+        uint256 periodStart; 
+        uint256 periodEnd;
         uint256 autoReleaseTime;
     }
 
@@ -72,17 +72,17 @@ error OnlyResolverCanDecide();
         uint256 disputeStartTime;
     }
 
-    mapping(uint256 => DepositContract) public contracts;
+    mapping(uint256 => Deposit) public deposits;
     mapping(uint256 => Dispute) public disputes;
-    uint256 public nextContractId;
+    uint256 public nextDepositId;
     address public resolver;
     uint256 public platformFee;
     address public feeRecipient;
     uint256 public constant MAX_PLATFORM_FEE = 1000;
     IERC20 public immutable USDC_TOKEN;
 
-    uint256[] private activeContractsForAutoRelease;
-    uint256[] private disputedContractsForTimeout;
+    uint256[] private activeDepositsForAutoRelease;
+    uint256[] private disputedDepositsForTimeout;
 
     uint256 public constant GRACE_PERIOD = 7 days;
     uint256 public constant DISPUTE_RESOLUTION_TIME = 14 days;
@@ -91,52 +91,52 @@ error OnlyResolverCanDecide();
 
     address public forwarder;
 
-    event ContractCreated(
-        uint256 indexed contractId,
+    event DepositCreated(
+        uint256 indexed depositId,
         address indexed depositor,
         address indexed beneficiary,
         uint256 depositAmount,
-        uint256 contractEnd
+        uint256 periodEnd
     );
 
     event DepositPaid(
-        uint256 indexed contractId,
+        uint256 indexed depositId,
         address indexed depositor
     );
 
     event CleanExitConfirmed(
-        uint256 indexed contractId,
+        uint256 indexed depositId,
         address indexed beneficiary
     );
 
     event DisputeRaised(
-        uint256 indexed contractId,
+        uint256 indexed depositId,
         address indexed beneficiary,
         uint256 claimedAmount,
         string evidenceHash
     );
 
     event DepositorRespondedToDispute(
-        uint256 indexed contractId,
+        uint256 indexed depositId,
         address indexed depositor,
         string responseHash
     );
 
     event ResolverDecisionMade(
-        uint256 indexed contractId,
+        uint256 indexed depositId,
         address indexed resolver,
         uint256 amountToDepositor,
         uint256 amountToBeneficiary
     );
 
     event DisputeResolvedByTimeout(
-        uint256 indexed contractId,
+        uint256 indexed depositId,
         address indexed depositor,
         uint256 amount
     );
 
     event AutoReleaseExecuted(
-        uint256 indexed contractId,
+        uint256 indexed depositId,
         address indexed depositor,
         uint256 amount
     );
@@ -153,7 +153,8 @@ error OnlyResolverCanDecide();
 
     event FeeRecipientUpdated(
         address indexed oldFeeRecipient,
-        address indexed newFeeRecipient);
+        address indexed newFeeRecipient
+    );
 
     modifier onlyForwarder() {
         if (msg.sender != forwarder) revert OnlyForwarder();
@@ -170,84 +171,84 @@ error OnlyResolverCanDecide();
 
         resolver = _resolver;
         platformFee = _platformFee;
-        nextContractId = 1;
+        nextDepositId = 1;
         USDC_TOKEN = IERC20(_usdcToken);
         forwarder = address(0);
         feeRecipient = _feeRecipient;
     }
 
-    function createContract(address _depositor, uint256 _depositAmount, uint256 _contractStart, uint256 _contractEnd) public whenNotPaused {
+    function createDeposit(address _depositor, uint256 _depositAmount, uint256 _periodStart, uint256 _periodEnd) public whenNotPaused {
         if (_depositAmount == 0) revert DepositMustBeGreaterThanZero();
-        if (_contractEnd <= _contractStart) revert EndMustBeAfterStart();
+        if (_periodEnd <= _periodStart) revert EndMustBeAfterStart();
         if (_depositor == address(0)) revert InvalidDepositorAddress();
 
-        uint256 contractId = nextContractId;
-        uint256 autoReleaseTime = _contractEnd + GRACE_PERIOD;
+        uint256 depositId = nextDepositId;
+        uint256 autoReleaseTime = _periodEnd + GRACE_PERIOD;
     
-    contracts[contractId] = DepositContract({
-        depositor: _depositor,
-        status: ContractStatus.WAITING_FOR_DEPOSIT,
-        beneficiary: msg.sender, 
-        id: contractId,
-        depositAmount: _depositAmount,
-        contractStart: _contractStart,
-        contractEnd: _contractEnd,
-        autoReleaseTime: autoReleaseTime
-    });
+        deposits[depositId] = Deposit({
+            depositor: _depositor,
+            status: DepositStatus.WAITING_FOR_DEPOSIT,
+            beneficiary: msg.sender, 
+            id: depositId,
+            depositAmount: _depositAmount,
+            periodStart: _periodStart,
+            periodEnd: _periodEnd,
+            autoReleaseTime: autoReleaseTime
+        });
 
-    emit ContractCreated(
-        contractId,
-        _depositor,
-        msg.sender,
-        _depositAmount,
-        _contractEnd
-    );
+        emit DepositCreated(
+            depositId,
+            _depositor,
+            msg.sender,
+            _depositAmount,
+            _periodEnd
+        );
     
-    unchecked {
-        nextContractId = contractId + 1;
+        unchecked {
+            nextDepositId = depositId + 1;
         }
     }
 
-    function payDeposit(uint256 _contractId) public nonReentrant whenNotPaused {
-        DepositContract storage depositContract = contracts[_contractId];
+    function payDeposit(uint256 _depositId) public nonReentrant whenNotPaused {
+        Deposit storage deposit = deposits[_depositId];
         
-        if (depositContract.id == 0) revert ContractDoesNotExist();
-        if (depositContract.status != ContractStatus.WAITING_FOR_DEPOSIT) revert InvalidStatus();
-        if (depositContract.depositor != msg.sender) revert OnlyDepositorCanPay();
+        if (deposit.id == 0) revert DepositDoesNotExist();
+        if (deposit.status != DepositStatus.WAITING_FOR_DEPOSIT) revert InvalidStatus();
+        if (deposit.depositor != msg.sender) revert OnlyDepositorCanPay();
         
-        uint256 fee = (depositContract.depositAmount * platformFee) / 10000;
+        uint256 fee = (deposit.depositAmount * platformFee) / 10000;
 
-        depositContract.status = ContractStatus.ACTIVE;
-        activeContractsForAutoRelease.push(_contractId);
+        deposit.status = DepositStatus.ACTIVE;
+        activeDepositsForAutoRelease.push(_depositId);
 
-        USDC_TOKEN.safeTransferFrom(msg.sender, address(this), depositContract.depositAmount);
+        USDC_TOKEN.safeTransferFrom(msg.sender, address(this), deposit.depositAmount);
         if (fee > 0) {
             USDC_TOKEN.safeTransferFrom(msg.sender, feeRecipient, fee);
         }
         
-        emit DepositPaid(_contractId, msg.sender);
+        emit DepositPaid(_depositId, msg.sender);
     }
 
-    function getContract(uint256 _contractId) public view returns (DepositContract memory) {
-        if (contracts[_contractId].id == 0) revert ContractDoesNotExist();
-        return contracts[_contractId];
+    function getDeposit(uint256 _depositId) public view returns (Deposit memory) {
+        if (deposits[_depositId].id == 0) revert DepositDoesNotExist();
+        return deposits[_depositId];
     }
 
     function raiseDispute(
-        uint256 _contractId, 
+        uint256 _depositId, 
         uint256 _claimedAmount, 
         string memory _evidenceHash
     ) public whenNotPaused {
-        DepositContract storage depositContract = contracts[_contractId];
+        Deposit storage deposit = deposits[_depositId];
 
-        if (depositContract.id == 0) revert ContractDoesNotExist();
+        if (deposit.id == 0) revert DepositDoesNotExist();
         if (_claimedAmount == 0) revert DepositMustBeGreaterThanZero(); 
-        if (depositContract.beneficiary != msg.sender) revert OnlyBeneficiaryCanRaiseDispute();
-        if (depositContract.status != ContractStatus.ACTIVE) revert InvalidStatus();              
-        if (block.timestamp < depositContract.contractEnd) revert ContractPeriodNotEnded();       
-        if (_claimedAmount > depositContract.depositAmount) revert AmountExceedsDeposit();            
+        if (deposit.beneficiary != msg.sender) revert OnlyBeneficiaryCanRaiseDispute();
+        if (deposit.status != DepositStatus.ACTIVE) revert InvalidStatus();              
+        if (block.timestamp < deposit.periodEnd) revert PeriodNotEnded();       
+        if (_claimedAmount > deposit.depositAmount) revert AmountExceedsDeposit();            
         
-        disputes[_contractId] = Dispute({
+        disputes[_depositId] = Dispute({
             claimedAmount: _claimedAmount,
             evidenceHash: _evidenceHash,
             responseHash: "",    
@@ -255,96 +256,96 @@ error OnlyResolverCanDecide();
             disputeStartTime: block.timestamp  
         });
         
-        depositContract.status = ContractStatus.DISPUTED; 
+        deposit.status = DepositStatus.DISPUTED; 
 
-        _removeFromArray(activeContractsForAutoRelease, _contractId);
-        disputedContractsForTimeout.push(_contractId);
+        _removeFromArray(activeDepositsForAutoRelease, _depositId);
+        disputedDepositsForTimeout.push(_depositId);
         
-        emit DisputeRaised(_contractId, msg.sender, _claimedAmount, _evidenceHash);
+        emit DisputeRaised(_depositId, msg.sender, _claimedAmount, _evidenceHash);
     }
 
-    function respondToDispute(uint256 _contractId, string memory _responseHash) public whenNotPaused {
-        DepositContract storage depositContract = contracts[_contractId];
+    function respondToDispute(uint256 _depositId, string memory _responseHash) public whenNotPaused {
+        Deposit storage deposit = deposits[_depositId];
 
-        if (depositContract.id == 0) revert ContractDoesNotExist();
-        if (msg.sender != depositContract.depositor) revert OnlyDepositorCanRespond();
-        if (depositContract.status != ContractStatus.DISPUTED) revert InvalidStatus();
-        if (disputes[_contractId].depositorResponded) revert AlreadyResponded();
+        if (deposit.id == 0) revert DepositDoesNotExist();
+        if (msg.sender != deposit.depositor) revert OnlyDepositorCanRespond();
+        if (deposit.status != DepositStatus.DISPUTED) revert InvalidStatus();
+        if (disputes[_depositId].depositorResponded) revert AlreadyResponded();
         
-        disputes[_contractId].responseHash = _responseHash;
-        disputes[_contractId].depositorResponded = true;
+        disputes[_depositId].responseHash = _responseHash;
+        disputes[_depositId].depositorResponded = true;
     
-        emit DepositorRespondedToDispute(_contractId, msg.sender, _responseHash);
+        emit DepositorRespondedToDispute(_depositId, msg.sender, _responseHash);
     }
 
-    function makeResolverDecision(uint256 _contractId, uint256 _amountToBeneficiary) public nonReentrant {
-        DepositContract storage depositContract = contracts[_contractId];
+    function makeResolverDecision(uint256 _depositId, uint256 _amountToBeneficiary) public nonReentrant {
+        Deposit storage deposit = deposits[_depositId];
 
         if (resolver != msg.sender) revert OnlyResolverCanDecide();
-        if (depositContract.id == 0) revert ContractDoesNotExist();
-        if (depositContract.status != ContractStatus.DISPUTED) revert InvalidStatus(); 
-        if (_amountToBeneficiary > depositContract.depositAmount) revert AmountExceedsDeposit();
+        if (deposit.id == 0) revert DepositDoesNotExist();
+        if (deposit.status != DepositStatus.DISPUTED) revert InvalidStatus(); 
+        if (_amountToBeneficiary > deposit.depositAmount) revert AmountExceedsDeposit();
         
-        USDC_TOKEN.safeTransfer(depositContract.beneficiary, _amountToBeneficiary);
+        USDC_TOKEN.safeTransfer(deposit.beneficiary, _amountToBeneficiary);
 
-        uint256 amountToDepositor = depositContract.depositAmount - _amountToBeneficiary;
+        uint256 amountToDepositor = deposit.depositAmount - _amountToBeneficiary;
 
-        USDC_TOKEN.safeTransfer(depositContract.depositor, amountToDepositor);
+        USDC_TOKEN.safeTransfer(deposit.depositor, amountToDepositor);
         
-        depositContract.status = ContractStatus.RESOLVED;
-        _removeFromArray(disputedContractsForTimeout, _contractId);
+        deposit.status = DepositStatus.RESOLVED;
+        _removeFromArray(disputedDepositsForTimeout, _depositId);
         
-        emit ResolverDecisionMade(_contractId, msg.sender, amountToDepositor, _amountToBeneficiary);
+        emit ResolverDecisionMade(_depositId, msg.sender, amountToDepositor, _amountToBeneficiary);
     }
 
-    function resolveDisputeByTimeout(uint256 _contractId) public nonReentrant {
-        DepositContract storage depositContract = contracts[_contractId];
+    function resolveDisputeByTimeout(uint256 _depositId) public nonReentrant {
+        Deposit storage deposit = deposits[_depositId];
 
-        if (depositContract.id == 0) revert ContractDoesNotExist();
-        if (msg.sender != depositContract.depositor) revert OnlyDepositorCanResolveTimeout();
-        if (depositContract.status != ContractStatus.DISPUTED) revert InvalidStatus();
+        if (deposit.id == 0) revert DepositDoesNotExist();
+        if (msg.sender != deposit.depositor) revert OnlyDepositorCanResolveTimeout();
+        if (deposit.status != DepositStatus.DISPUTED) revert InvalidStatus();
         
-        uint256 requiredTime = _getDisputeRequiredTime(_contractId);
+        uint256 requiredTime = _getDisputeRequiredTime(_depositId);
         if (block.timestamp < requiredTime) {
             revert DisputeStillActive();
         }
         
-        _resolveDisputeToDepositor(_contractId);
-        _removeFromArray(disputedContractsForTimeout, _contractId);
+        _resolveDisputeToDepositor(_depositId);
+        _removeFromArray(disputedDepositsForTimeout, _depositId);
         
-        emit DisputeResolvedByTimeout(_contractId, depositContract.depositor, depositContract.depositAmount);
+        emit DisputeResolvedByTimeout(_depositId, deposit.depositor, deposit.depositAmount);
     }
 
-    function confirmCleanExit(uint256 _contractId) public nonReentrant {
-        DepositContract storage depositContract = contracts[_contractId];
+    function confirmCleanExit(uint256 _depositId) public nonReentrant {
+        Deposit storage deposit = deposits[_depositId];
 
-        if (depositContract.beneficiary != msg.sender) revert OnlyBeneficiaryCanConfirm();
-        if (block.timestamp < depositContract.contractEnd) revert ContractPeriodNotEnded();
+        if (deposit.beneficiary != msg.sender) revert OnlyBeneficiaryCanConfirm();
+        if (block.timestamp < deposit.periodEnd) revert PeriodNotEnded();
         
-        _releaseDepositToDepositor(_contractId);
-        _removeFromArray(activeContractsForAutoRelease, _contractId);
+        _releaseDepositToDepositor(_depositId);
+        _removeFromArray(activeDepositsForAutoRelease, _depositId);
         
-        emit CleanExitConfirmed(_contractId, msg.sender);
+        emit CleanExitConfirmed(_depositId, msg.sender);
     }
 
-    function _releaseDepositToDepositor(uint256 _contractId) internal {
-        DepositContract storage depositContract = contracts[_contractId];
+    function _releaseDepositToDepositor(uint256 _depositId) internal {
+        Deposit storage deposit = deposits[_depositId];
         
-        if (depositContract.id == 0) revert ContractDoesNotExist();
-        if (depositContract.status != ContractStatus.ACTIVE) revert InvalidStatus();
+        if (deposit.id == 0) revert DepositDoesNotExist();
+        if (deposit.status != DepositStatus.ACTIVE) revert InvalidStatus();
         
-        depositContract.status = ContractStatus.COMPLETED;
-        USDC_TOKEN.safeTransfer(depositContract.depositor, depositContract.depositAmount);
+        deposit.status = DepositStatus.COMPLETED;
+        USDC_TOKEN.safeTransfer(deposit.depositor, deposit.depositAmount);
     }
 
-    function _resolveDisputeToDepositor(uint256 _contractId) internal {
-        DepositContract storage depositContract = contracts[_contractId];
+    function _resolveDisputeToDepositor(uint256 _depositId) internal {
+        Deposit storage deposit = deposits[_depositId];
         
-        if (depositContract.id == 0) revert ContractDoesNotExist();
-        if (depositContract.status != ContractStatus.DISPUTED) revert InvalidStatus();
+        if (deposit.id == 0) revert DepositDoesNotExist();
+        if (deposit.status != DepositStatus.DISPUTED) revert InvalidStatus();
                 
-        depositContract.status = ContractStatus.RESOLVED;
-        USDC_TOKEN.safeTransfer(depositContract.depositor, depositContract.depositAmount);
+        deposit.status = DepositStatus.RESOLVED;
+        USDC_TOKEN.safeTransfer(deposit.depositor, deposit.depositAmount);
     }
 
     function setForwarder(address _forwarder) external onlyOwner {
@@ -392,29 +393,29 @@ error OnlyResolverCanDecide();
         override
         returns (bool upkeepNeeded, bytes memory performData)
     {
-        uint256 autoReleaseChecks = activeContractsForAutoRelease.length > MAX_CHECKS_PER_UPKEEP
+        uint256 autoReleaseChecks = activeDepositsForAutoRelease.length > MAX_CHECKS_PER_UPKEEP
             ? MAX_CHECKS_PER_UPKEEP
-            : activeContractsForAutoRelease.length;
+            : activeDepositsForAutoRelease.length;
         
         for (uint256 i = 0; i < autoReleaseChecks; i++) { 
-            uint256 contractId = activeContractsForAutoRelease[i];
-            DepositContract memory c = contracts[contractId];
+            uint256 depositId = activeDepositsForAutoRelease[i];
+            Deposit memory d = deposits[depositId];
             
-            if (block.timestamp >= c.autoReleaseTime) {
-                return (true, abi.encode(contractId, ActionType.AUTO_RELEASE));
+            if (block.timestamp >= d.autoReleaseTime) {
+                return (true, abi.encode(depositId, ActionType.AUTO_RELEASE));
             }
         }
         
-        uint256 disputeChecks = disputedContractsForTimeout.length > MAX_CHECKS_PER_UPKEEP
+        uint256 disputeChecks = disputedDepositsForTimeout.length > MAX_CHECKS_PER_UPKEEP
             ? MAX_CHECKS_PER_UPKEEP
-            : disputedContractsForTimeout.length;
+            : disputedDepositsForTimeout.length;
         
         for (uint256 i = 0; i < disputeChecks; i++) {
-            uint256 contractId = disputedContractsForTimeout[i];
-            uint256 requiredTime = _getDisputeRequiredTime(contractId);
+            uint256 depositId = disputedDepositsForTimeout[i];
+            uint256 requiredTime = _getDisputeRequiredTime(depositId);
             
             if (block.timestamp >= requiredTime) {
-                return (true, abi.encode(contractId, ActionType.DISPUTE_TIMEOUT));
+                return (true, abi.encode(depositId, ActionType.DISPUTE_TIMEOUT));
             }
         }
         
@@ -422,31 +423,31 @@ error OnlyResolverCanDecide();
     }
 
     function performUpkeep(bytes calldata performData) external override onlyForwarder nonReentrant {
-        (uint256 contractId, ActionType action) = abi.decode(performData, (uint256, ActionType));
-        DepositContract storage depositContract = contracts[contractId];
+        (uint256 depositId, ActionType action) = abi.decode(performData, (uint256, ActionType));
+        Deposit storage deposit = deposits[depositId];
 
         if (action == ActionType.AUTO_RELEASE) {
-            if (block.timestamp < depositContract.autoReleaseTime) {
+            if (block.timestamp < deposit.autoReleaseTime) {
                 revert TooEarlyForAutoRelease();
             }
             
-            _releaseDepositToDepositor(contractId);
-            _removeFromArray(activeContractsForAutoRelease, contractId);
+            _releaseDepositToDepositor(depositId);
+            _removeFromArray(activeDepositsForAutoRelease, depositId);
             
-            emit AutoReleaseExecuted(contractId, depositContract.depositor, depositContract.depositAmount);
+            emit AutoReleaseExecuted(depositId, deposit.depositor, deposit.depositAmount);
             
         } else if (action == ActionType.DISPUTE_TIMEOUT) {
 
-            uint256 requiredTime = _getDisputeRequiredTime(contractId);
+            uint256 requiredTime = _getDisputeRequiredTime(depositId);
             
             if (block.timestamp < requiredTime) {
                 revert DisputeStillActive();
             }
 
-            _resolveDisputeToDepositor(contractId);
-            _removeFromArray(disputedContractsForTimeout, contractId);
+            _resolveDisputeToDepositor(depositId);
+            _removeFromArray(disputedDepositsForTimeout, depositId);
 
-            emit DisputeResolvedByTimeout(contractId, depositContract.depositor, depositContract.depositAmount);
+            emit DisputeResolvedByTimeout(depositId, deposit.depositor, deposit.depositAmount);
         }
     }
 
@@ -460,8 +461,8 @@ error OnlyResolverCanDecide();
         }
     }
 
-    function _getDisputeRequiredTime(uint256 _contractId) internal view returns (uint256) {
-        Dispute memory dispute = disputes[_contractId];
+    function _getDisputeRequiredTime(uint256 _depositId) internal view returns (uint256) {
+        Dispute memory dispute = disputes[_depositId];
         
         if (dispute.depositorResponded) {
             return dispute.disputeStartTime + DISPUTE_RESOLUTION_TIME + DISPUTE_EXTENSION_TIME;

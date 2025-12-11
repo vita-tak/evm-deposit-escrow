@@ -29,62 +29,62 @@ contract DepositEscrowTest is Test {
         usdc.approve(address(escrow), type(uint256).max);
     }
     
-    function test_CreateContract_Success() public {
+    function test_CreateDeposit_Success() public {
         uint256 start = block.timestamp;
         uint256 end = start + 30 days;
         
         vm.prank(beneficiary);
-        escrow.createContract(depositor, DEPOSIT_AMOUNT, start, end);
+        escrow.createDeposit(depositor, DEPOSIT_AMOUNT, start, end);
         
-        DepositEscrow.DepositContract memory contract_ = escrow.getContract(1);
+        DepositEscrow.Deposit memory deposit = escrow.getDeposit(1);
         
-        assertEq(contract_.id, 1);
-        assertEq(contract_.depositor, depositor);
-        assertEq(contract_.beneficiary, beneficiary);
-        assertEq(contract_.depositAmount, DEPOSIT_AMOUNT);
-        assertEq(uint256(contract_.status), uint256(DepositEscrow.ContractStatus.WAITING_FOR_DEPOSIT));
-        assertEq(contract_.autoReleaseTime, end + 7 days);
+        assertEq(deposit.id, 1);
+        assertEq(deposit.depositor, depositor);
+        assertEq(deposit.beneficiary, beneficiary);
+        assertEq(deposit.depositAmount, DEPOSIT_AMOUNT);
+        assertEq(uint256(deposit.status), uint256(DepositEscrow.DepositStatus.WAITING_FOR_DEPOSIT));
+        assertEq(deposit.autoReleaseTime, end + 7 days);
     }
     
-    function test_CreateContract_RevertsIfDepositIsZero() public {
+    function test_CreateDeposit_RevertsIfDepositIsZero() public {
         uint256 start = block.timestamp;
         uint256 end = start + 30 days;
         
         vm.prank(beneficiary);
         vm.expectRevert(DepositEscrow.DepositMustBeGreaterThanZero.selector);
-        escrow.createContract(depositor, 0, start, end);
+        escrow.createDeposit(depositor, 0, start, end);
     }
     
-    function test_CreateContract_RevertsIfEndBeforeStart() public {
+    function test_CreateDeposit_RevertsIfEndBeforeStart() public {
         uint256 start = block.timestamp + 30 days;
         uint256 end = start - 1 days;
         
         vm.prank(beneficiary);
         vm.expectRevert(DepositEscrow.EndMustBeAfterStart.selector);
-        escrow.createContract(depositor, DEPOSIT_AMOUNT, start, end);
+        escrow.createDeposit(depositor, DEPOSIT_AMOUNT, start, end);
     }
     
-    function test_CreateContract_RevertsIfDepositorIsZero() public {
+    function test_CreateDeposit_RevertsIfDepositorIsZero() public {
         uint256 start = block.timestamp;
         uint256 end = start + 30 days;
         
         vm.prank(beneficiary);
         vm.expectRevert(DepositEscrow.InvalidDepositorAddress.selector);
-        escrow.createContract(address(0), DEPOSIT_AMOUNT, start, end);
+        escrow.createDeposit(address(0), DEPOSIT_AMOUNT, start, end);
     }
     
-    function _createTestContract() internal returns (uint256) {
+    function _createTestDeposit() internal returns (uint256) {
         uint256 start = block.timestamp;
         uint256 end = start + 30 days;
         
         vm.prank(beneficiary);
-        escrow.createContract(depositor, DEPOSIT_AMOUNT, start, end);
+        escrow.createDeposit(depositor, DEPOSIT_AMOUNT, start, end);
         
         return 1;
     }
     
     function test_PayDeposit_Success() public {
-        uint256 contractId = _createTestContract();
+        uint256 depositId = _createTestDeposit();
         
         uint256 fee = (DEPOSIT_AMOUNT * PLATFORM_FEE) / 10000;
         uint256 totalRequired = DEPOSIT_AMOUNT + fee;
@@ -93,38 +93,38 @@ contract DepositEscrowTest is Test {
         uint256 escrowBalanceBefore = usdc.balanceOf(address(escrow));
         
         vm.prank(depositor);
-        escrow.payDeposit(contractId);
+        escrow.payDeposit(depositId);
         
         assertEq(usdc.balanceOf(depositor), depositorBalanceBefore - totalRequired);
         assertEq(usdc.balanceOf(address(escrow)), escrowBalanceBefore + DEPOSIT_AMOUNT);
         assertEq(usdc.balanceOf(feeRecipient), fee);
         
-        DepositEscrow.DepositContract memory contract_ = escrow.getContract(contractId);
-        assertEq(uint256(contract_.status), uint256(DepositEscrow.ContractStatus.ACTIVE));
+        DepositEscrow.Deposit memory deposit = escrow.getDeposit(depositId);
+        assertEq(uint256(deposit.status), uint256(DepositEscrow.DepositStatus.ACTIVE));
     }
     
     function test_PayDeposit_RevertsIfNotDepositor() public {
-        uint256 contractId = _createTestContract();
+        uint256 depositId = _createTestDeposit();
         
         vm.prank(beneficiary);
         vm.expectRevert(DepositEscrow.OnlyDepositorCanPay.selector);
-        escrow.payDeposit(contractId);
+        escrow.payDeposit(depositId);
     }
     
     function test_PayDeposit_RevertsIfAlreadyPaid() public {
-        uint256 contractId = _createTestContract();
+        uint256 depositId = _createTestDeposit();
         
         vm.prank(depositor);
-        escrow.payDeposit(contractId);
+        escrow.payDeposit(depositId);
         
         vm.prank(depositor);
         vm.expectRevert(DepositEscrow.InvalidStatus.selector);
-        escrow.payDeposit(contractId);
+        escrow.payDeposit(depositId);
     }
     
-    function test_PayDeposit_RevertsIfContractDoesNotExist() public {
+    function test_PayDeposit_RevertsIfDepositDoesNotExist() public {
         vm.prank(depositor);
-        vm.expectRevert(DepositEscrow.ContractDoesNotExist.selector);
+        vm.expectRevert(DepositEscrow.DepositDoesNotExist.selector);
         escrow.payDeposit(999);
     }
     
@@ -134,7 +134,7 @@ contract DepositEscrowTest is Test {
         uint256 start = block.timestamp;
         uint256 end = start + 30 days;
         vm.prank(beneficiary);
-        escrow.createContract(poorDepositor, DEPOSIT_AMOUNT, start, end);
+        escrow.createDeposit(poorDepositor, DEPOSIT_AMOUNT, start, end);
         
         usdc.mint(poorDepositor, 100e6);
         
@@ -153,7 +153,7 @@ contract DepositEscrowTest is Test {
         uint256 start = block.timestamp;
         uint256 end = start + 30 days;
         vm.prank(beneficiary);
-        escrow.createContract(newDepositor, DEPOSIT_AMOUNT, start, end);
+        escrow.createDeposit(newDepositor, DEPOSIT_AMOUNT, start, end);
         
         vm.prank(newDepositor);
         usdc.approve(address(escrow), 100e6);
@@ -163,58 +163,58 @@ contract DepositEscrowTest is Test {
         escrow.payDeposit(2);
     }
     
-    function _createAndPayContract() internal returns (uint256) {
-        uint256 contractId = _createTestContract();
+    function _createAndPayDeposit() internal returns (uint256) {
+        uint256 depositId = _createTestDeposit();
         
         vm.prank(depositor);
-        escrow.payDeposit(contractId);
+        escrow.payDeposit(depositId);
         
-        return contractId;
+        return depositId;
     }
 
-    function _createPayAndEndContract() internal returns (uint256) {
-        uint256 contractId = _createAndPayContract();
+    function _createPayAndEndDeposit() internal returns (uint256) {
+        uint256 depositId = _createAndPayDeposit();
         
-        DepositEscrow.DepositContract memory contract_ = escrow.getContract(contractId);
-        vm.warp(contract_.contractEnd + 1);
+        DepositEscrow.Deposit memory deposit = escrow.getDeposit(depositId);
+        vm.warp(deposit.periodEnd + 1);
         
-        return contractId;
+        return depositId;
     }
     
     function test_ConfirmCleanExit_Success() public {
-        uint256 contractId = _createAndPayContract();
+        uint256 depositId = _createAndPayDeposit();
         
-        DepositEscrow.DepositContract memory contract_ = escrow.getContract(contractId);
-        vm.warp(contract_.contractEnd + 1);
+        DepositEscrow.Deposit memory deposit = escrow.getDeposit(depositId);
+        vm.warp(deposit.periodEnd + 1);
         
         uint256 depositorBalanceBefore = usdc.balanceOf(depositor);
         
         vm.prank(beneficiary);
-        escrow.confirmCleanExit(contractId);
+        escrow.confirmCleanExit(depositId);
         
         assertEq(usdc.balanceOf(depositor), depositorBalanceBefore + DEPOSIT_AMOUNT);
         
-        contract_ = escrow.getContract(contractId);
-        assertEq(uint256(contract_.status), uint256(DepositEscrow.ContractStatus.COMPLETED));
+        deposit = escrow.getDeposit(depositId);
+        assertEq(uint256(deposit.status), uint256(DepositEscrow.DepositStatus.COMPLETED));
     }
     
     function test_ConfirmCleanExit_RevertsIfNotBeneficiary() public {
-        uint256 contractId = _createAndPayContract();
+        uint256 depositId = _createAndPayDeposit();
         
-        DepositEscrow.DepositContract memory contract_ = escrow.getContract(contractId);
-        vm.warp(contract_.contractEnd + 1);
+        DepositEscrow.Deposit memory deposit = escrow.getDeposit(depositId);
+        vm.warp(deposit.periodEnd + 1);
         
         vm.prank(depositor);
         vm.expectRevert(DepositEscrow.OnlyBeneficiaryCanConfirm.selector);
-        escrow.confirmCleanExit(contractId);
+        escrow.confirmCleanExit(depositId);
     }
     
     function test_ConfirmCleanExit_RevertsIfBeforeEnd() public {
-        uint256 contractId = _createAndPayContract();
+        uint256 depositId = _createAndPayDeposit();
         
         vm.prank(beneficiary);
-        vm.expectRevert(DepositEscrow.ContractPeriodNotEnded.selector);
-        escrow.confirmCleanExit(contractId);
+        vm.expectRevert(DepositEscrow.PeriodNotEnded.selector);
+        escrow.confirmCleanExit(depositId);
     }
     
     function test_ConfirmCleanExit_RevertsIfNotActive() public {
@@ -222,7 +222,7 @@ contract DepositEscrowTest is Test {
         uint256 end = start + 30 days;
         
         vm.prank(beneficiary);
-        escrow.createContract(depositor, DEPOSIT_AMOUNT, start, end);
+        escrow.createDeposit(depositor, DEPOSIT_AMOUNT, start, end);
         
         vm.warp(end + 1);
         
@@ -231,32 +231,28 @@ contract DepositEscrowTest is Test {
         escrow.confirmCleanExit(1);
     }
 
-    // =============================================================================
-    // DISPUTE TESTS
-    // =============================================================================
-
     function _createAndRaiseDispute() internal returns (uint256) {
-        uint256 contractId = _createPayAndEndContract();
+        uint256 depositId = _createPayAndEndDeposit();
         
         vm.prank(beneficiary);
-        escrow.raiseDispute(contractId, 300e6, "QmEvidence123");
+        escrow.raiseDispute(depositId, 300e6, "QmEvidence123");
         
-        return contractId;
+        return depositId;
     }
 
     function test_RaiseDispute_Success() public {
-        uint256 contractId = _createPayAndEndContract();
+        uint256 depositId = _createPayAndEndDeposit();
         
         uint256 claimedAmount = 300e6;
         string memory evidenceHash = "QmTest123";
         
         vm.prank(beneficiary);
-        escrow.raiseDispute(contractId, claimedAmount, evidenceHash);
+        escrow.raiseDispute(depositId, claimedAmount, evidenceHash);
         
-        DepositEscrow.DepositContract memory contract_ = escrow.getContract(contractId);
-        assertEq(uint256(contract_.status), uint256(DepositEscrow.ContractStatus.DISPUTED));
+        DepositEscrow.Deposit memory deposit = escrow.getDeposit(depositId);
+        assertEq(uint256(deposit.status), uint256(DepositEscrow.DepositStatus.DISPUTED));
         
-        (uint256 claimed, string memory evidence, , bool responded, uint256 startTime) = escrow.disputes(contractId);
+        (uint256 claimed, string memory evidence, , bool responded, uint256 startTime) = escrow.disputes(depositId);
         assertEq(claimed, claimedAmount);
         assertEq(evidence, evidenceHash);
         assertEq(responded, false);
@@ -264,16 +260,16 @@ contract DepositEscrowTest is Test {
     }
 
     function test_RaiseDispute_RevertsIfNotBeneficiary() public {
-        uint256 contractId = _createPayAndEndContract();
+        uint256 depositId = _createPayAndEndDeposit();
         
         vm.prank(depositor);
         vm.expectRevert(DepositEscrow.OnlyBeneficiaryCanRaiseDispute.selector);
-        escrow.raiseDispute(contractId, 300e6, "QmTest");
+        escrow.raiseDispute(depositId, 300e6, "QmTest");
     }
 
-    function test_RaiseDispute_RevertsIfContractDoesNotExist() public {
+    function test_RaiseDispute_RevertsIfDepositDoesNotExist() public {
         vm.prank(beneficiary);
-        vm.expectRevert(DepositEscrow.ContractDoesNotExist.selector);
+        vm.expectRevert(DepositEscrow.DepositDoesNotExist.selector);
         escrow.raiseDispute(999, 300e6, "QmTest");
     }
 
@@ -282,7 +278,7 @@ contract DepositEscrowTest is Test {
         uint256 end = start + 30 days;
         
         vm.prank(beneficiary);
-        escrow.createContract(depositor, DEPOSIT_AMOUNT, start, end);
+        escrow.createDeposit(depositor, DEPOSIT_AMOUNT, start, end);
         
         vm.warp(end + 1);
         
@@ -291,78 +287,78 @@ contract DepositEscrowTest is Test {
         escrow.raiseDispute(1, 300e6, "QmTest");
     }
 
-    function test_RaiseDispute_RevertsIfBeforeContractEnd() public {
-        uint256 contractId = _createAndPayContract();
+    function test_RaiseDispute_RevertsIfBeforePeriodEnd() public {
+        uint256 depositId = _createAndPayDeposit();
         
         vm.prank(beneficiary);
-        vm.expectRevert(DepositEscrow.ContractPeriodNotEnded.selector);
-        escrow.raiseDispute(contractId, 300e6, "QmTest");
+        vm.expectRevert(DepositEscrow.PeriodNotEnded.selector);
+        escrow.raiseDispute(depositId, 300e6, "QmTest");
     }
 
     function test_RaiseDispute_RevertsIfClaimedAmountIsZero() public {
-        uint256 contractId = _createPayAndEndContract();
+        uint256 depositId = _createPayAndEndDeposit();
         
         vm.prank(beneficiary);
         vm.expectRevert(DepositEscrow.DepositMustBeGreaterThanZero.selector);
-        escrow.raiseDispute(contractId, 0, "QmTest");
+        escrow.raiseDispute(depositId, 0, "QmTest");
     }
 
     function test_RaiseDispute_RevertsIfClaimedAmountExceedsDeposit() public {
-        uint256 contractId = _createPayAndEndContract();
+        uint256 depositId = _createPayAndEndDeposit();
         
         vm.prank(beneficiary);
         vm.expectRevert(DepositEscrow.AmountExceedsDeposit.selector);
-        escrow.raiseDispute(contractId, DEPOSIT_AMOUNT + 1, "QmTest");
+        escrow.raiseDispute(depositId, DEPOSIT_AMOUNT + 1, "QmTest");
     }
 
     function test_RespondToDispute_Success() public {
-        uint256 contractId = _createAndRaiseDispute();
+        uint256 depositId = _createAndRaiseDispute();
         
         string memory responseHash = "QmResponse123";
         
         vm.prank(depositor);
-        escrow.respondToDispute(contractId, responseHash);
+        escrow.respondToDispute(depositId, responseHash);
         
-        (, , string memory response, bool responded, ) = escrow.disputes(contractId);
+        (, , string memory response, bool responded, ) = escrow.disputes(depositId);
         assertEq(response, responseHash);
         assertEq(responded, true);
     }
 
     function test_RespondToDispute_RevertsIfNotDepositor() public {
-        uint256 contractId = _createAndRaiseDispute();
+        uint256 depositId = _createAndRaiseDispute();
         
         vm.prank(beneficiary);
         vm.expectRevert(DepositEscrow.OnlyDepositorCanRespond.selector);
-        escrow.respondToDispute(contractId, "QmResponse");
+        escrow.respondToDispute(depositId, "QmResponse");
     }
 
-    function test_RespondToDispute_RevertsIfContractDoesNotExist() public {
+    function test_RespondToDispute_RevertsIfDepositDoesNotExist() public {
         vm.prank(depositor);
-        vm.expectRevert(DepositEscrow.ContractDoesNotExist.selector);
+        vm.expectRevert(DepositEscrow.DepositDoesNotExist.selector);
         escrow.respondToDispute(999, "QmResponse");
     }
 
     function test_RespondToDispute_RevertsIfNotDisputed() public {
-        uint256 contractId = _createPayAndEndContract();
+        uint256 depositId = _createPayAndEndDeposit();
         
         vm.prank(depositor);
         vm.expectRevert(DepositEscrow.InvalidStatus.selector);
-        escrow.respondToDispute(contractId, "QmResponse");
+        escrow.respondToDispute(depositId, "QmResponse");
     }
 
     function test_RespondToDispute_RevertsIfAlreadyResponded() public {
-        uint256 contractId = _createAndRaiseDispute();
+        uint256 depositId = _createAndRaiseDispute();
         
         vm.prank(depositor);
-        escrow.respondToDispute(contractId, "QmResponse1");
+        escrow.respondToDispute(depositId, "QmResponse1");
         
         vm.prank(depositor);
         vm.expectRevert(DepositEscrow.AlreadyResponded.selector);
-        escrow.respondToDispute(contractId, "QmResponse2");
+        escrow.respondToDispute(depositId, "QmResponse2");
     }
 
     function test_MakeResolverDecision_Success() public {
-        uint256 contractId = _createAndRaiseDispute();
+        uint256 depositId = _createAndRaiseDispute();
         
         uint256 amountToBeneficiary = 300e6;
         uint256 amountToDepositor = DEPOSIT_AMOUNT - amountToBeneficiary;
@@ -371,43 +367,43 @@ contract DepositEscrowTest is Test {
         uint256 depositorBalanceBefore = usdc.balanceOf(depositor);
         
         vm.prank(resolver);
-        escrow.makeResolverDecision(contractId, amountToBeneficiary);
+        escrow.makeResolverDecision(depositId, amountToBeneficiary);
         
         assertEq(usdc.balanceOf(beneficiary), beneficiaryBalanceBefore + amountToBeneficiary);
         assertEq(usdc.balanceOf(depositor), depositorBalanceBefore + amountToDepositor);
         
-        DepositEscrow.DepositContract memory contract_ = escrow.getContract(contractId);
-        assertEq(uint256(contract_.status), uint256(DepositEscrow.ContractStatus.RESOLVED));
+        DepositEscrow.Deposit memory deposit = escrow.getDeposit(depositId);
+        assertEq(uint256(deposit.status), uint256(DepositEscrow.DepositStatus.RESOLVED));
     }
 
     function test_MakeResolverDecision_FullRefundToDepositor() public {
-        uint256 contractId = _createAndRaiseDispute();
+        uint256 depositId = _createAndRaiseDispute();
         
         uint256 depositorBalanceBefore = usdc.balanceOf(depositor);
         uint256 beneficiaryBalanceBefore = usdc.balanceOf(beneficiary);
         
         vm.prank(resolver);
-        escrow.makeResolverDecision(contractId, 0);
+        escrow.makeResolverDecision(depositId, 0);
         
         assertEq(usdc.balanceOf(depositor), depositorBalanceBefore + DEPOSIT_AMOUNT);
         assertEq(usdc.balanceOf(beneficiary), beneficiaryBalanceBefore);
     }
 
     function test_MakeResolverDecision_FullAmountToBeneficiary() public {
-        uint256 contractId = _createAndRaiseDispute();
+        uint256 depositId = _createAndRaiseDispute();
         
         uint256 beneficiaryBalanceBefore = usdc.balanceOf(beneficiary);
         uint256 depositorBalanceBefore = usdc.balanceOf(depositor);
         
         vm.prank(resolver);
-        escrow.makeResolverDecision(contractId, DEPOSIT_AMOUNT);
+        escrow.makeResolverDecision(depositId, DEPOSIT_AMOUNT);
         
         assertEq(usdc.balanceOf(beneficiary), beneficiaryBalanceBefore + DEPOSIT_AMOUNT);
         assertEq(usdc.balanceOf(depositor), depositorBalanceBefore);
     }
 
     function test_MakeResolverDecision_Split5050() public {
-        uint256 contractId = _createAndRaiseDispute();
+        uint256 depositId = _createAndRaiseDispute();
         
         uint256 half = DEPOSIT_AMOUNT / 2;
         
@@ -415,88 +411,84 @@ contract DepositEscrowTest is Test {
         uint256 depositorBalanceBefore = usdc.balanceOf(depositor);
         
         vm.prank(resolver);
-        escrow.makeResolverDecision(contractId, half);
+        escrow.makeResolverDecision(depositId, half);
         
         assertEq(usdc.balanceOf(beneficiary), beneficiaryBalanceBefore + half);
         assertEq(usdc.balanceOf(depositor), depositorBalanceBefore + half);
     }
 
     function test_MakeResolverDecision_RevertsIfNotResolver() public {
-        uint256 contractId = _createAndRaiseDispute();
+        uint256 depositId = _createAndRaiseDispute();
         
         vm.prank(beneficiary);
         vm.expectRevert(DepositEscrow.OnlyResolverCanDecide.selector);
-        escrow.makeResolverDecision(contractId, 300e6);
+        escrow.makeResolverDecision(depositId, 300e6);
     }
 
-    function test_MakeResolverDecision_RevertsIfContractDoesNotExist() public {
+    function test_MakeResolverDecision_RevertsIfDepositDoesNotExist() public {
         vm.prank(resolver);
-        vm.expectRevert(DepositEscrow.ContractDoesNotExist.selector);
+        vm.expectRevert(DepositEscrow.DepositDoesNotExist.selector);
         escrow.makeResolverDecision(999, 300e6);
     }
 
     function test_MakeResolverDecision_RevertsIfNotDisputed() public {
-        uint256 contractId = _createPayAndEndContract();
+        uint256 depositId = _createPayAndEndDeposit();
         
         vm.prank(resolver);
         vm.expectRevert(DepositEscrow.InvalidStatus.selector);
-        escrow.makeResolverDecision(contractId, 300e6);
+        escrow.makeResolverDecision(depositId, 300e6);
     }
 
     function test_MakeResolverDecision_RevertsIfAmountExceedsDeposit() public {
-        uint256 contractId = _createAndRaiseDispute();
+        uint256 depositId = _createAndRaiseDispute();
         
         vm.prank(resolver);
         vm.expectRevert(DepositEscrow.AmountExceedsDeposit.selector);
-        escrow.makeResolverDecision(contractId, DEPOSIT_AMOUNT + 1);
+        escrow.makeResolverDecision(depositId, DEPOSIT_AMOUNT + 1);
     }
 
     function test_ResolveDisputeByTimeout_Success() public {
-        uint256 contractId = _createAndRaiseDispute();
+        uint256 depositId = _createAndRaiseDispute();
         
         vm.warp(block.timestamp + 14 days + 1);
         
         uint256 depositorBalanceBefore = usdc.balanceOf(depositor);
         
         vm.prank(depositor); 
-        escrow.resolveDisputeByTimeout(contractId);
+        escrow.resolveDisputeByTimeout(depositId);
         
         assertEq(usdc.balanceOf(depositor), depositorBalanceBefore + DEPOSIT_AMOUNT);
         
-        DepositEscrow.DepositContract memory contract_ = escrow.getContract(contractId);
-        assertEq(uint256(contract_.status), uint256(DepositEscrow.ContractStatus.RESOLVED));
+        DepositEscrow.Deposit memory deposit = escrow.getDeposit(depositId);
+        assertEq(uint256(deposit.status), uint256(DepositEscrow.DepositStatus.RESOLVED));
     }
 
     function test_ResolveDisputeByTimeout_RevertsIfTooEarly() public {
-        uint256 contractId = _createAndRaiseDispute();
+        uint256 depositId = _createAndRaiseDispute();
         
         vm.warp(block.timestamp + 13 days);
         
         vm.prank(depositor);
         vm.expectRevert(DepositEscrow.DisputeStillActive.selector);
-        escrow.resolveDisputeByTimeout(contractId);
+        escrow.resolveDisputeByTimeout(depositId);
     }
 
     function test_ResolveDisputeByTimeout_RevertsIfNotDisputed() public {
-        uint256 contractId = _createPayAndEndContract();
+        uint256 depositId = _createPayAndEndDeposit();
         
         vm.warp(block.timestamp + 14 days + 1);
         
         vm.prank(depositor);
         vm.expectRevert(DepositEscrow.InvalidStatus.selector);
-        escrow.resolveDisputeByTimeout(contractId);
+        escrow.resolveDisputeByTimeout(depositId);
     }
 
-    function test_ResolveDisputeByTimeout_RevertsIfContractDoesNotExist() public {
+    function test_ResolveDisputeByTimeout_RevertsIfDepositDoesNotExist() public {
         vm.warp(block.timestamp + 14 days + 1);
         
-        vm.expectRevert(DepositEscrow.ContractDoesNotExist.selector);
+        vm.expectRevert(DepositEscrow.DepositDoesNotExist.selector);
         escrow.resolveDisputeByTimeout(999);
     }
-
-    // ============================================
-    // setResolver Tests
-    // ============================================
 
     function test_SetResolver_Success() public {
         address newResolver = makeAddr("newResolver");
@@ -534,10 +526,6 @@ contract DepositEscrowTest is Test {
         escrow.setResolver(currentResolver);
     }
 
-    // ============================================
-    // setFeeRecipient Tests
-    // ============================================
-
     function test_SetFeeRecipient_Success() public {
         address newFeeRecipient = makeAddr("newFeeRecipient");
         
@@ -574,10 +562,6 @@ contract DepositEscrowTest is Test {
         escrow.setFeeRecipient(currentFeeRecipient);
     }
 
-    // ============================================
-    // rescueTokens Tests
-    // ============================================
-
     function test_RescueTokens_Success() public {
         usdc.mint(address(escrow), 1000e6);
         
@@ -602,10 +586,6 @@ contract DepositEscrowTest is Test {
         escrow.rescueTokens(address(0), 1000e6);
     }
 
-    // ============================================
-    // Pausable Tests
-    // ============================================
-
     function test_Pause_Success() public {
         escrow.pause();
         assertTrue(escrow.paused());
@@ -623,7 +603,7 @@ contract DepositEscrowTest is Test {
         escrow.pause();
     }
 
-    function test_CreateContract_RevertsWhenPaused() public {
+    function test_CreateDeposit_RevertsWhenPaused() public {
         escrow.pause();
         
         uint256 start = block.timestamp;
@@ -631,52 +611,52 @@ contract DepositEscrowTest is Test {
         
         vm.prank(beneficiary);
         vm.expectRevert(abi.encodeWithSignature("EnforcedPause()"));
-        escrow.createContract(depositor, DEPOSIT_AMOUNT, start, end);
+        escrow.createDeposit(depositor, DEPOSIT_AMOUNT, start, end);
     }
 
     function test_PayDeposit_RevertsWhenPaused() public {
-        uint256 contractId = _createTestContract();
+        uint256 depositId = _createTestDeposit();
         
         escrow.pause();
         
         vm.prank(depositor);
         vm.expectRevert(abi.encodeWithSignature("EnforcedPause()"));
-        escrow.payDeposit(contractId);
+        escrow.payDeposit(depositId);
     }
 
     function test_RaiseDispute_RevertsWhenPaused() public {
-        uint256 contractId = _createPayAndEndContract();
+        uint256 depositId = _createPayAndEndDeposit();
         
         escrow.pause();
         
         vm.prank(beneficiary);
         vm.expectRevert(abi.encodeWithSignature("EnforcedPause()"));
-        escrow.raiseDispute(contractId, 300e6, "QmTest");
+        escrow.raiseDispute(depositId, 300e6, "QmTest");
     }
 
     function test_RespondToDispute_RevertsWhenPaused() public {
-        uint256 contractId = _createAndRaiseDispute();
+        uint256 depositId = _createAndRaiseDispute();
         
         escrow.pause();
         
         vm.prank(depositor);
         vm.expectRevert(abi.encodeWithSignature("EnforcedPause()"));
-        escrow.respondToDispute(contractId, "QmResponse");
+        escrow.respondToDispute(depositId, "QmResponse");
     }
 
     function test_ConfirmCleanExit_WorksWhenPaused() public {
-        uint256 contractId = _createAndPayContract();
+        uint256 depositId = _createAndPayDeposit();
         
-        DepositEscrow.DepositContract memory contract_ = escrow.getContract(contractId);
-        vm.warp(contract_.contractEnd + 1);
+        DepositEscrow.Deposit memory deposit = escrow.getDeposit(depositId);
+        vm.warp(deposit.periodEnd + 1);
         
         escrow.pause();
         
         vm.prank(beneficiary);
-        escrow.confirmCleanExit(contractId);
+        escrow.confirmCleanExit(depositId);
         
-        contract_ = escrow.getContract(contractId);
-        assertEq(uint256(contract_.status), uint256(DepositEscrow.ContractStatus.COMPLETED));
+        deposit = escrow.getDeposit(depositId);
+        assertEq(uint256(deposit.status), uint256(DepositEscrow.DepositStatus.COMPLETED));
     }
 
     function test_Constructor_RevertsIfFeeTooHigh() public {
