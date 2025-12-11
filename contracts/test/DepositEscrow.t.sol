@@ -13,6 +13,7 @@ contract DepositEscrowTest is Test {
     address public beneficiary = address(2);
     address public depositor = address(3);
     address public alice = address(4); 
+    address public feeRecipient = address(5); 
     
     uint256 public constant PLATFORM_FEE = 100;
     uint256 public constant DEPOSIT_AMOUNT = 1000e6;
@@ -22,7 +23,7 @@ contract DepositEscrowTest is Test {
     
     function setUp() public {
         usdc = new ERC20Mock();
-        escrow = new DepositEscrow(resolver, PLATFORM_FEE, address(usdc), resolver);
+        escrow = new DepositEscrow(resolver, PLATFORM_FEE, address(usdc), feeRecipient);
         usdc.mint(depositor, 10000e6);
         vm.prank(depositor);
         usdc.approve(address(escrow), type(uint256).max);
@@ -96,7 +97,7 @@ contract DepositEscrowTest is Test {
         
         assertEq(usdc.balanceOf(depositor), depositorBalanceBefore - totalRequired);
         assertEq(usdc.balanceOf(address(escrow)), escrowBalanceBefore + DEPOSIT_AMOUNT);
-        assertEq(usdc.balanceOf(resolver), fee);
+        assertEq(usdc.balanceOf(feeRecipient), fee);
         
         DepositEscrow.DepositContract memory contract_ = escrow.getContract(contractId);
         assertEq(uint256(contract_.status), uint256(DepositEscrow.ContractStatus.ACTIVE));
@@ -541,7 +542,7 @@ contract DepositEscrowTest is Test {
         address newFeeRecipient = makeAddr("newFeeRecipient");
         
         vm.expectEmit(true, true, false, false);
-        emit FeeRecipientUpdated(resolver, newFeeRecipient);
+        emit FeeRecipientUpdated(feeRecipient, newFeeRecipient);
         
         escrow.setFeeRecipient(newFeeRecipient);
         
@@ -578,7 +579,6 @@ contract DepositEscrowTest is Test {
     // ============================================
 
     function test_RescueTokens_Success() public {
-        // Simulate someone accidentally sending USDC to contract
         usdc.mint(address(escrow), 1000e6);
         
         uint256 ownerBalanceBefore = usdc.balanceOf(address(this));
@@ -672,11 +672,29 @@ contract DepositEscrowTest is Test {
         
         escrow.pause();
         
-        // Should still work! ✅
         vm.prank(beneficiary);
         escrow.confirmCleanExit(contractId);
         
         contract_ = escrow.getContract(contractId);
         assertEq(uint256(contract_.status), uint256(DepositEscrow.ContractStatus.COMPLETED));
     }
-}
+
+    function test_Constructor_RevertsIfFeeTooHigh() public {
+        vm.expectRevert(DepositEscrow.FeeTooHigh.selector);
+        
+        new DepositEscrow(
+            resolver,
+            1001,
+            address(usdc),
+            feeRecipient
+        );
+    }
+
+    function test_Constructor_AcceptsMaxFee() public {
+        DepositEscrow newEscrow = new DepositEscrow(resolver,
+        1000, 
+        address(usdc),
+        feeRecipient);   
+        assertEq(newEscrow.platformFee(), 1000);      
+        }
+    }
