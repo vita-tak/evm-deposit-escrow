@@ -16,31 +16,34 @@ contract DepositEscrow is AutomationCompatibleInterface, ReentrancyGuard, Ownabl
         DISPUTE_TIMEOUT
     }
 
-    error DepositMustBeGreaterThanZero();
-    error EndMustBeAfterStart();
-    error InvalidDepositorAddress();
-    error InvalidResolverAddress();
-    error InvalidUSDCAddress();
-    error InvalidFeeRecipientAddress();
-    error ContractDoesNotExist();
-    error OnlyDepositorCanPay();
-    error InvalidStatus();
-    error IncorrectAmount();
-    error OnlyBeneficiaryCanConfirm();
-    error ContractPeriodNotEnded();
-    error TransferFailed();
-    error OnlyBeneficiaryCanRaiseDispute();
-    error AmountExceedsDeposit();
-    error OnlyDepositorCanRespond();
-    error AlreadyResponded();
-    error OnlyResolverCanDecide();
-    error DisputeStillActive();
-    error OnlyForwarder();
-    error OnlyDepositorCanResolveTimeout();
-    error TooEarlyForAutoRelease();
-    error ResolverUnchanged();
-    error FeeRecipientUnchanged();
-    error FeeTooHigh();
+error AmountExceedsDeposit();
+error DepositMustBeGreaterThanZero();
+error EndMustBeAfterStart();
+error FeeTooHigh();
+error IncorrectAmount();
+
+error InvalidDepositorAddress();
+error InvalidFeeRecipientAddress();
+error InvalidResolverAddress();
+error InvalidUSDCAddress();
+error ResolverUnchanged();
+error FeeRecipientUnchanged();
+
+error AlreadyResponded();
+error ContractDoesNotExist();
+error ContractPeriodNotEnded();
+error DisputeStillActive();
+error InvalidStatus();
+error TooEarlyForAutoRelease();
+error TransferFailed();
+
+error OnlyBeneficiaryCanConfirm();
+error OnlyBeneficiaryCanRaiseDispute();
+error OnlyDepositorCanPay();
+error OnlyDepositorCanRespond();
+error OnlyDepositorCanResolveTimeout();
+error OnlyForwarder();
+error OnlyResolverCanDecide();
 
     enum ContractStatus {
         WAITING_FOR_DEPOSIT,
