@@ -96,12 +96,15 @@ contract DepositEscrow is AutomationCompatibleInterface, ReentrancyGuard, Ownabl
         address indexed depositor,
         address indexed beneficiary,
         uint256 depositAmount,
-        uint256 periodEnd
+        uint256 periodStart, 
+        uint256 periodEnd,
+        uint256 autoReleaseTime 
     );
 
     event DepositPaid(
         uint256 indexed depositId,
-        address indexed depositor
+        address indexed depositor,
+        uint256 amount 
     );
 
     event CleanExitConfirmed(
@@ -113,13 +116,16 @@ contract DepositEscrow is AutomationCompatibleInterface, ReentrancyGuard, Ownabl
         uint256 indexed depositId,
         address indexed beneficiary,
         uint256 claimedAmount,
-        string evidenceHash
+        string evidenceHash,
+        uint256 disputeStartTime,
+        uint256 disputeDeadline 
     );
 
     event DepositorRespondedToDispute(
         uint256 indexed depositId,
         address indexed depositor,
-        string responseHash
+        string responseHash,
+        uint256 extendedDeadline
     );
 
     event ResolverDecisionMade(
@@ -201,7 +207,9 @@ contract DepositEscrow is AutomationCompatibleInterface, ReentrancyGuard, Ownabl
             _depositor,
             msg.sender,
             _depositAmount,
-            _periodEnd
+             _periodStart, 
+            _periodEnd,
+            autoReleaseTime
         );
     
         unchecked {
@@ -226,7 +234,7 @@ contract DepositEscrow is AutomationCompatibleInterface, ReentrancyGuard, Ownabl
             USDC_TOKEN.safeTransferFrom(msg.sender, feeRecipient, fee);
         }
         
-        emit DepositPaid(_depositId, msg.sender);
+        emit DepositPaid(_depositId, msg.sender, deposit.depositAmount);
     }
 
     function getDeposit(uint256 _depositId) public view returns (Deposit memory) {
@@ -246,22 +254,24 @@ contract DepositEscrow is AutomationCompatibleInterface, ReentrancyGuard, Ownabl
         if (deposit.beneficiary != msg.sender) revert OnlyBeneficiaryCanRaiseDispute();
         if (deposit.status != DepositStatus.ACTIVE) revert InvalidStatus();              
         if (block.timestamp < deposit.periodEnd) revert PeriodNotEnded();       
-        if (_claimedAmount > deposit.depositAmount) revert AmountExceedsDeposit();            
+        if (_claimedAmount > deposit.depositAmount) revert AmountExceedsDeposit();
+        
+        uint256 disputeStartTime = block.timestamp;
+        uint256 deadline = disputeStartTime + DISPUTE_RESOLUTION_TIME;
         
         disputes[_depositId] = Dispute({
             claimedAmount: _claimedAmount,
             evidenceHash: _evidenceHash,
             responseHash: "",    
             depositorResponded: false,
-            disputeStartTime: block.timestamp  
+            disputeStartTime: disputeStartTime
         });
         
         deposit.status = DepositStatus.DISPUTED; 
-
         _removeFromArray(activeDepositsForAutoRelease, _depositId);
         disputedDepositsForTimeout.push(_depositId);
-        
-        emit DisputeRaised(_depositId, msg.sender, _claimedAmount, _evidenceHash);
+
+        emit DisputeRaised(_depositId, msg.sender, _claimedAmount, _evidenceHash, disputeStartTime, deadline);
     }
 
     function respondToDispute(uint256 _depositId, string memory _responseHash) public whenNotPaused {
@@ -272,10 +282,15 @@ contract DepositEscrow is AutomationCompatibleInterface, ReentrancyGuard, Ownabl
         if (deposit.status != DepositStatus.DISPUTED) revert InvalidStatus();
         if (disputes[_depositId].depositorResponded) revert AlreadyResponded();
         
-        disputes[_depositId].responseHash = _responseHash;
-        disputes[_depositId].depositorResponded = true;
-    
-        emit DepositorRespondedToDispute(_depositId, msg.sender, _responseHash);
+        Dispute storage dispute = disputes[_depositId];
+        dispute.responseHash = _responseHash;
+        dispute.depositorResponded = true;
+
+        uint256 newDeadline = dispute.disputeStartTime 
+            + DISPUTE_RESOLUTION_TIME 
+            + DISPUTE_EXTENSION_TIME;
+        
+        emit DepositorRespondedToDispute(_depositId, msg.sender, _responseHash, newDeadline);
     }
 
     function makeResolverDecision(uint256 _depositId, uint256 _amountToBeneficiary) public nonReentrant {
