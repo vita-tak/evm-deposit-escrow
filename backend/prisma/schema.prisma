@@ -1,0 +1,71 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id            String @id @default(cuid())
+  walletAddress String   @unique
+  createdAt     DateTime @default(now())
+  
+  depositsAsDepositor   Deposit[] @relation("DepositorDeposits")
+  depositsAsBeneficiary Deposit[] @relation("BeneficiaryDeposits")
+}
+
+enum DepositStatus {
+  WAITING_FOR_DEPOSIT
+  ACTIVE
+  COMPLETED
+  DISPUTED
+  RESOLVED
+}
+
+model Deposit {
+  id         String @id @default(cuid()) 
+  depositId Int    @unique          
+  depositAmount BigInt
+  periodStart     DateTime
+  periodEnd       DateTime
+  autoReleaseTime DateTime
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  status DepositStatus
+
+
+  depositor   User   @relation("DepositorDeposits", fields: [depositorId], references: [id])
+  depositorId String 
+  
+  beneficiary   User   @relation("BeneficiaryDeposits", fields: [beneficiaryId], references: [id])
+  beneficiaryId String
+  
+  dispute Dispute? 
+}
+
+model Dispute {
+  id               String   @id @default(cuid())
+
+  claimedAmount    BigInt
+  evidenceHash     String
+  responseHash     String? 
+  depositorResponded Boolean @default(false)
+  disputeStartTime DateTime
+  disputeDeadline  DateTime 
+
+  deposit   Deposit @relation(fields: [depositId], references: [id])
+  depositId String  @unique
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model BlockchainState {
+  id                 Int      @id @default(1) 
+  lastProcessedBlock BigInt   @default(0)
+  updatedAt          DateTime @updatedAt
+  
+  @@map("blockchain_state") 
+}
