@@ -18,7 +18,17 @@ export const ViemProvider: Provider = {
 
     return createPublicClient({
       chain: polygonAmoy,
-      transport: http(rpcUrl),
+      transport: http(rpcUrl, {
+        timeout: 30_000,
+        retryCount: 3,
+      }),
+      pollingInterval: 12_000,
+      batch: {
+        multicall: {
+          wait: 16,
+        },
+      },
+      cacheTime: 4_000,
     });
   },
   inject: [ConfigService],
