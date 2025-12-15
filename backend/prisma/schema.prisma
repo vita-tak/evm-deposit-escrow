@@ -1,10 +1,11 @@
 generator client {
-  provider = "prisma-client"
+  provider = "prisma-client-js"
   output   = "../generated/prisma"
 }
 
 datasource db {
   provider = "postgresql"
+  url      = env("DATABASE_URL") 
 }
 
 model User {
@@ -25,22 +26,21 @@ enum DepositStatus {
 }
 
 model Deposit {
-  id         String @id @default(cuid()) 
-  depositId Int    @unique          
-  depositAmount BigInt
+  id              String        @id @default(cuid()) 
+  onChainId       String        @unique  
+  depositAmount   String       
   periodStart     DateTime
   periodEnd       DateTime
   autoReleaseTime DateTime
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  status DepositStatus
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  status          DepositStatus
 
-
-  depositor   User   @relation("DepositorDeposits", fields: [depositorId], references: [id])
-  depositorId String 
+  depositor         User   @relation("DepositorDeposits", fields: [depositorAddress], references: [walletAddress])
+  depositorAddress  String 
   
-  beneficiary   User   @relation("BeneficiaryDeposits", fields: [beneficiaryId], references: [id])
-  beneficiaryId String
+  beneficiary         User   @relation("BeneficiaryDeposits", fields: [beneficiaryAddress], references: [walletAddress])
+  beneficiaryAddress  String
   
   dispute Dispute? 
 }
