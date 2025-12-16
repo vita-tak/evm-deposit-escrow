@@ -143,4 +143,52 @@ export class BlockchainDepositsService {
       );
     }
   }
+
+  async processAutoReleaseExecutedEvent(
+    depositId: bigint,
+    depositor: string,
+    blockNumber: bigint,
+    txHash: string,
+  ) {
+    try {
+      this.logger.log(
+        `Processing AutoReleaseExecuted: depositId=${depositId}, beneficiary=${beneficiary}`,
+      );
+
+      const deposit = await this.prisma.deposit.findUnique({
+        where: { onChainId: depositId.toString() },
+      });
+
+      if (!deposit) {
+        this.logger.warn(
+          `Deposit ${depositId} not found in database - might be syncing`,
+        );
+        return;
+      }
+
+      if (deposit.status !== DepositStatus.ACTIVE) {
+        this.logger.error(
+          `Invalid status for AutoRelease: depositId=${depositId}, ` +
+            `expected=ACTIVE, actual=${deposit.status}`,
+        );
+        return;
+      }
+
+      await this.prisma.deposit.update({
+        where: { onChainId: depositId.toString() },
+        data: {
+          status: DepositStatus.COMPLETED,
+        },
+      });
+
+      this.logger.log(
+        `AutoReleaseExecuted ${depositId} processed successfully (block: ${blockNumber})`,
+      );
+    } catch (error) {
+      this.logger.error(
+        `Failed to process AutoReleaseExecuted ${depositId}:`,
+        error,
+      );
+    }
+  }
 }

@@ -28,6 +28,7 @@ export class BlockchainService implements OnModuleInit {
     this.watchDepositCreatedEvent();
     this.watchDepositPaidEvent();
     this.watchCleanExitConfirmedEvent();
+    this.watchAutoReleaseExecutedEvent();
 
     this.logger.log('Deposit event listeners successfully started');
   }
@@ -114,6 +115,32 @@ export class BlockchainService implements OnModuleInit {
       onError: (error) => {
         this.logger.error(
           `Error watching CleanExitConfirmed: ${error.message}`,
+        );
+      },
+    });
+  }
+
+  private watchAutoReleaseExecutedEvent() {
+    this.viem.watchContractEvent({
+      address: this.CONTRACT_ADDRESS,
+      abi: DEPOSIT_ESCROW_ABI,
+      eventName: 'AutoReleaseExecuted',
+      onLogs: (logs) => {
+        const log = logs[0] as any;
+        if (!log.args) return;
+
+        const { depositId, depositor } = log.args;
+
+        void this.blockchainDeposits.processAutoReleaseExecutedEvent(
+          depositId,
+          depositor,
+          log.blockNumber!,
+          log.transactionHash!,
+        );
+      },
+      onError: (error) => {
+        this.logger.error(
+          `Error watching AutoReleaseExecuted: ${error.message}`,
         );
       },
     });
