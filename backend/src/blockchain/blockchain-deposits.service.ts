@@ -64,4 +64,37 @@ export class BlockchainDepositsService {
       throw error;
     }
   }
+
+  async processDepositPaidEvent(
+    depositId: bigint,
+    depositor: string,
+    blockNumber: bigint,
+  ) {
+    this.logger.log(`Processing DepositPaid: ID ${depositId}`);
+
+    try {
+      const deposit = await this.prisma.deposit.findUnique({
+        where: { onChainId: depositId.toString() },
+      });
+
+      if (!deposit) {
+        this.logger.warn(`DepositPaid ${depositId} not found`);
+        return;
+      }
+
+      await this.prisma.deposit.update({
+        where: { id: deposit.id },
+        data: {
+          status: DepositStatus.ACTIVE,
+        },
+      });
+
+      this.logger.log(
+        `DepositPaid ${depositId} processed successfully (block: ${blockNumber})`,
+      );
+    } catch (error) {
+      this.logger.error(`Failed to process DepositPaid ${depositId}:`, error);
+      throw error;
+    }
+  }
 }

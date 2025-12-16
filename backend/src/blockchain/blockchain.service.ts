@@ -25,14 +25,19 @@ export class BlockchainService implements OnModuleInit {
   watchDepositEvents() {
     this.logger.debug('Starting to watch Deposit events...');
 
+    this.watchDepositCreatedEvent();
+    this.watchDepositPaidEvent();
+
+    this.logger.log('Deposit event listeners successfully started');
+  }
+
+  private watchDepositCreatedEvent() {
     this.viem.watchContractEvent({
       abi: DEPOSIT_ESCROW_ABI,
       address: this.CONTRACT_ADDRESS,
       eventName: 'DepositCreated',
       onLogs: (logs) => {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const log = logs[0] as any;
-
         if (!log.args) return;
 
         const {
@@ -58,6 +63,29 @@ export class BlockchainService implements OnModuleInit {
       },
       onError: (error) => {
         this.logger.error(`Error watching DepositCreated: ${error.message}`);
+      },
+    });
+  }
+
+  private watchDepositPaidEvent() {
+    this.viem.watchContractEvent({
+      abi: DEPOSIT_ESCROW_ABI,
+      address: this.CONTRACT_ADDRESS,
+      eventName: 'DepositPaid',
+      onLogs: (logs) => {
+        const log = logs[0] as any;
+        if (!log.args) return;
+
+        const { depositId, depositor } = log.args;
+
+        void this.blockchainDeposits.processDepositPaidEvent(
+          depositId,
+          depositor,
+          log.blockNumber!,
+        );
+      },
+      onError: (error) => {
+        this.logger.error(`Error watching DepositPaid: ${error.message}`);
       },
     });
   }
