@@ -61,7 +61,6 @@ export class BlockchainDepositsService {
         `Failed to process DepositCreated ${depositId}:`,
         error,
       );
-      throw error;
     }
   }
 
@@ -94,7 +93,54 @@ export class BlockchainDepositsService {
       );
     } catch (error) {
       this.logger.error(`Failed to process DepositPaid ${depositId}:`, error);
-      throw error;
+    }
+  }
+
+  async processCleanExitConfirmedEvent(
+    depositId: bigint,
+    beneficiary: string,
+    blockNumber: bigint,
+    txHash: string,
+  ) {
+    try {
+      this.logger.log(
+        `Processing CleanExitConfirmed: depositId=${depositId}, beneficiary=${beneficiary}`,
+      );
+
+      const deposit = await this.prisma.deposit.findUnique({
+        where: { onChainId: depositId.toString() },
+      });
+
+      if (!deposit) {
+        this.logger.warn(
+          `Deposit ${depositId} not found in database - might be syncing`,
+        );
+        return;
+      }
+
+      if (deposit.status !== DepositStatus.ACTIVE) {
+        this.logger.error(
+          `Invalid status for CleanExit: depositId=${depositId}, ` +
+            `expected=ACTIVE, actual=${deposit.status}`,
+        );
+        return;
+      }
+
+      await this.prisma.deposit.update({
+        where: { onChainId: depositId.toString() },
+        data: {
+          status: DepositStatus.COMPLETED,
+        },
+      });
+
+      this.logger.log(
+        `CleanExitConfirmed ${depositId} processed successfully (block: ${blockNumber})`,
+      );
+    } catch (error) {
+      this.logger.error(
+        `Failed to process CleanExitConfirmed ${depositId}:`,
+        error,
+      );
     }
   }
 }
