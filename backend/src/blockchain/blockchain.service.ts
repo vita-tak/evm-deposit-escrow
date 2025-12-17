@@ -5,6 +5,7 @@ import { VIEM_PROVIDER, ViemProvider } from 'src/provider/provider.viem';
 import { DEPOSIT_ESCROW_ABI } from '../constants/contract';
 import { BlockchainDepositsService } from './blockchain-deposits.service';
 import { BlockchainDisputesService } from './blockchain-disputes.service';
+import { deposit } from 'viem/zksync';
 
 @Injectable()
 export class BlockchainService implements OnModuleInit {
@@ -42,6 +43,7 @@ export class BlockchainService implements OnModuleInit {
     this.watchDisputeRaisedEvent();
     this.watchDepositorRespondedEvent();
     this.watchResolverDecisionEvent();
+    this.watchDisputeTimeoutEvent();
 
     this.logger.log('Dispute event listeners successfully started');
   }
@@ -240,6 +242,33 @@ export class BlockchainService implements OnModuleInit {
       onError: (error) => {
         this.logger.error(
           `Error watching ResolverDecisionMade: ${error.message}`,
+        );
+      },
+    });
+  }
+
+  private watchDisputeTimeoutEvent() {
+    this.viem.watchContractEvent({
+      address: this.CONTRACT_ADDRESS,
+      abi: DEPOSIT_ESCROW_ABI,
+      eventName: 'DisputeResolvedByTimeout',
+      onLogs: (logs) => {
+        const log = logs[0] as any;
+        if (!log.args) return;
+
+        const { depositId, depositor, amount } = log.args;
+
+        void this.blockchainDisputes.processDisputeTimeoutEvent(
+          depositId,
+          depositor,
+          amount,
+          log.blockNumber!,
+          log.transactionHash!,
+        );
+      },
+      onError: (error) => {
+        this.logger.error(
+          `Error watching DisputeResolvedByTimeout: ${error.message}`,
         );
       },
     });

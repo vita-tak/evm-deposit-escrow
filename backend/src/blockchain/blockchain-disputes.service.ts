@@ -169,4 +169,53 @@ export class BlockchainDisputesService {
       );
     }
   }
+
+  async processDisputeTimeoutEvent(
+    depositId: bigint,
+    depositor: string,
+    amount: bigint,
+    blockNumber: bigint,
+    txHash: string,
+  ) {
+    try {
+      this.logger.log(
+        `Processing DisputeTimeout: depositId=${depositId}, depositor=${depositor}, amount=${amount}`,
+      );
+
+      const deposit = await this.prisma.deposit.findUnique({
+        where: { onChainId: depositId.toString() },
+      });
+
+      if (!deposit) {
+        this.logger.warn(
+          `Deposit ${depositId} not found in database - might be syncing`,
+        );
+        return;
+      }
+
+      if (deposit.status !== DepositStatus.DISPUTED) {
+        this.logger.error(
+          `Invalid status for DisputeTimeout: depositId=${depositId}, ` +
+            `expected=DISPUTED, actual=${deposit.status}`,
+        );
+        return;
+      }
+
+      await this.prisma.deposit.update({
+        where: { id: deposit.id },
+        data: {
+          status: DepositStatus.RESOLVED,
+        },
+      });
+
+      this.logger.log(
+        `DisputeTimeout ${depositId} processed successfully (block: ${blockNumber})`,
+      );
+    } catch (error) {
+      this.logger.error(
+        `Failed to process DisputeTimeout ${depositId}:`,
+        error,
+      );
+    }
+  }
 }
