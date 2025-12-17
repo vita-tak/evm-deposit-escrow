@@ -119,4 +119,54 @@ export class BlockchainDisputesService {
       );
     }
   }
+
+  async processResolverDecisionEvent(
+    depositId: bigint,
+    resolver: string,
+    amountToDepositor: bigint,
+    amountToBeneficiary: bigint,
+    blockNumber: bigint,
+    txHash: string,
+  ) {
+    try {
+      this.logger.log(
+        `Processing ResolverDecision: depositId=${depositId}, resolver=${resolver}, amountToDepositor=${amountToDepositor}, amountToBeneficiary=${amountToBeneficiary}`,
+      );
+
+      const deposit = await this.prisma.deposit.findUnique({
+        where: { onChainId: depositId.toString() },
+      });
+
+      if (!deposit) {
+        this.logger.warn(
+          `Deposit ${depositId} not found in database - might be syncing`,
+        );
+        return;
+      }
+
+      if (deposit.status !== DepositStatus.DISPUTED) {
+        this.logger.error(
+          `Invalid status for ResolverDecision: depositId=${depositId}, ` +
+            `expected=DISPUTED, actual=${deposit.status}`,
+        );
+        return;
+      }
+
+      await this.prisma.deposit.update({
+        where: { id: deposit.id },
+        data: {
+          status: DepositStatus.RESOLVED,
+        },
+      });
+
+      this.logger.log(
+        `ResolverDecision ${depositId} processed successfully (block: ${blockNumber})`,
+      );
+    } catch (error) {
+      this.logger.error(
+        `Failed to process ResolverDecision ${depositId}:`,
+        error,
+      );
+    }
+  }
 }

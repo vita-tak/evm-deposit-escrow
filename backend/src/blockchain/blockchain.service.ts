@@ -1,4 +1,4 @@
-import { Inject, Injectable, Logger, OnModuleInit } from '@nestjs/common';
+import { Inject, Injectable, Logger, OnModuleInit, Res } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Address } from 'viem';
 import { VIEM_PROVIDER, ViemProvider } from 'src/provider/provider.viem';
@@ -41,6 +41,7 @@ export class BlockchainService implements OnModuleInit {
 
     this.watchDisputeRaisedEvent();
     this.watchDepositorRespondedEvent();
+    this.watchResolverDecisionEvent();
 
     this.logger.log('Dispute event listeners successfully started');
   }
@@ -210,6 +211,35 @@ export class BlockchainService implements OnModuleInit {
       onError: (error) => {
         this.logger.error(
           `Error watching DepositorRespondedToDispute: ${error.message}`,
+        );
+      },
+    });
+  }
+
+  private watchResolverDecisionEvent() {
+    this.viem.watchContractEvent({
+      address: this.CONTRACT_ADDRESS,
+      abi: DEPOSIT_ESCROW_ABI,
+      eventName: 'ResolverDecisionMade',
+      onLogs: (logs) => {
+        const log = logs[0] as any;
+        if (!log.args) return;
+
+        const { depositId, resolver, amountToDepositor, amountToBeneficiary } =
+          log.args;
+
+        void this.blockchainDisputes.processResolverDecisionEvent(
+          depositId,
+          resolver,
+          amountToDepositor,
+          amountToBeneficiary,
+          log.blockNumber!,
+          log.transactionHash!,
+        );
+      },
+      onError: (error) => {
+        this.logger.error(
+          `Error watching ResolverDecisionMade: ${error.message}`,
         );
       },
     });
