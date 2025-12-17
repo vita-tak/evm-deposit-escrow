@@ -152,7 +152,7 @@ export class BlockchainDepositsService {
   ) {
     try {
       this.logger.log(
-        `Processing AutoReleaseExecuted: depositId=${depositId}, beneficiary=${beneficiary}`,
+        `Processing AutoReleaseExecuted: depositId=${depositId}, depositor=${depositor}`,
       );
 
       const deposit = await this.prisma.deposit.findUnique({
