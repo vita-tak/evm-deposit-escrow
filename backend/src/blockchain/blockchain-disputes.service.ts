@@ -68,4 +68,55 @@ export class BlockchainDisputesService {
       this.logger.error(`Failed to process DisputeRaised ${depositId}:`, error);
     }
   }
+
+  async processDepositorRespondedEvent(
+    depositId: bigint,
+    depositor: string,
+    responseHash: string,
+    blockNumber: bigint,
+    txHash: string,
+  ) {
+    try {
+      this.logger.log(
+        `Processing DepositorResponded: depositId=${depositId}, depositor=${depositor}`,
+      );
+
+      const deposit = await this.prisma.deposit.findUnique({
+        where: { onChainId: depositId.toString() },
+      });
+
+      if (!deposit) {
+        this.logger.warn(
+          `Deposit ${depositId} not found in database - might be syncing`,
+        );
+        return;
+      }
+
+      const dispute = await this.prisma.dispute.findUnique({
+        where: { depositId: deposit.id },
+      });
+
+      if (!dispute) {
+        this.logger.error(`Dispute not found for deposit ${depositId}`);
+        return;
+      }
+
+      await this.prisma.dispute.update({
+        where: { depositId: deposit.id },
+        data: {
+          responseHash: responseHash,
+          depositorResponded: true,
+        },
+      });
+
+      this.logger.log(
+        `DepositorResponded ${depositId} processed successfully (block: ${blockNumber})`,
+      );
+    } catch (error) {
+      this.logger.error(
+        `Failed to process DepositorResponded ${depositId}:`,
+        error,
+      );
+    }
+  }
 }

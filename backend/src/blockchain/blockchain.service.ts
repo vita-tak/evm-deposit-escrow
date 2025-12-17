@@ -40,6 +40,7 @@ export class BlockchainService implements OnModuleInit {
     this.logger.debug('Starting to watch Dispute events...');
 
     this.watchDisputeRaisedEvent();
+    this.watchDepositorRespondedEvent();
 
     this.logger.log('Dispute event listeners successfully started');
   }
@@ -183,6 +184,33 @@ export class BlockchainService implements OnModuleInit {
       },
       onError: (error) => {
         this.logger.error(`Error watching DisputeRaised: ${error.message}`);
+      },
+    });
+  }
+
+  private watchDepositorRespondedEvent() {
+    this.viem.watchContractEvent({
+      address: this.CONTRACT_ADDRESS,
+      abi: DEPOSIT_ESCROW_ABI,
+      eventName: 'DepositorRespondedToDispute',
+      onLogs: (logs) => {
+        const log = logs[0] as any;
+        if (!log.args) return;
+
+        const { depositId, depositor, responseHash } = log.args;
+
+        void this.blockchainDisputes.processDepositorRespondedEvent(
+          depositId,
+          depositor,
+          responseHash,
+          log.blockNumber!,
+          log.transactionHash!,
+        );
+      },
+      onError: (error) => {
+        this.logger.error(
+          `Error watching DepositorRespondedToDispute: ${error.message}`,
+        );
       },
     });
   }
