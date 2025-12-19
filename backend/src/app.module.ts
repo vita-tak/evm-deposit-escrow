@@ -7,6 +7,7 @@ import { BlockchainModule } from './blockchain/blockchain.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { UsersModule } from './users/users.module';
 import { DepositsModule } from './deposits/deposits.module';
+import { DisputesModule } from './disputes/disputes.module';
 
 @Module({
   imports: [
@@ -18,6 +19,7 @@ import { DepositsModule } from './deposits/deposits.module';
     PrismaModule,
     UsersModule,
     DepositsModule,
+    DisputesModule,
   ],
   controllers: [AppController],
   providers: [AppService],
