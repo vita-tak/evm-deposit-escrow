@@ -48,7 +48,7 @@ model Deposit {
 model Dispute {
   id               String   @id @default(cuid())
 
-  claimedAmount    BigInt
+  claimedAmount    String
   evidenceHash     String
   responseHash     String? 
   depositorResponded Boolean @default(false)

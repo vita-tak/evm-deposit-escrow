@@ -50,7 +50,7 @@ export class BlockchainDisputesService {
         this.prisma.dispute.create({
           data: {
             depositId: deposit.id,
-            claimedAmount: BigInt(claimedAmount.toString()),
+            claimedAmount: claimedAmount.toString(),
             evidenceHash: evidenceHash,
             disputeStartTime: new Date(Number(blockTimestamp) * 1000),
             disputeDeadline: new Date(
