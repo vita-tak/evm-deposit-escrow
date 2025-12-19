@@ -5,6 +5,8 @@ import { AppService } from './app.service';
 import { ProviderModule } from './provider/provider.module';
 import { BlockchainModule } from './blockchain/blockchain.module';
 import { PrismaModule } from './prisma/prisma.module';
+import { UsersModule } from './users/users.module';
+import { DepositsModule } from './deposits/deposits.module';
 
 @Module({
   imports: [
@@ -14,6 +16,8 @@ import { PrismaModule } from './prisma/prisma.module';
     ProviderModule,
     BlockchainModule,
     PrismaModule,
+    UsersModule,
+    DepositsModule,
   ],
   controllers: [AppController],
   providers: [AppService],
