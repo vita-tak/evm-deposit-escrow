@@ -1,11 +1,10 @@
-import { Inject, Injectable, Logger, OnModuleInit, Res } from '@nestjs/common';
+import { Inject, Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Address } from 'viem';
 import { VIEM_PROVIDER, ViemProvider } from 'src/provider/provider.viem';
 import { DEPOSIT_ESCROW_ABI } from '../constants/contract';
 import { BlockchainDepositsService } from './blockchain-deposits.service';
 import { BlockchainDisputesService } from './blockchain-disputes.service';
-import { deposit } from 'viem/zksync';
 
 @Injectable()
 export class BlockchainService implements OnModuleInit {
