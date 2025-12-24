@@ -10,6 +10,11 @@ export class DepositsController {
     return this.depositsService.findAll();
   }
 
+  @Get('depositor/:address')
+  async findByDepositor(@Param('address') address: string) {
+    return this.depositsService.findByDepositor(address);
+  }
+
   @Get(':onChainId')
   async findById(@Param('onChainId') onChainId: string) {
     return this.depositsService.findById(BigInt(onChainId));

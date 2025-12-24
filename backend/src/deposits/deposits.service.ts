@@ -21,4 +21,23 @@ export class DepositsService {
       },
     });
   }
+
+  async findByDepositor(depositorAddress: string) {
+    return this.prisma.deposit.findMany({
+      where: {
+        depositorAddress: {
+          equals: depositorAddress,
+          mode: 'insensitive',
+        },
+      },
+      include: {
+        depositor: true,
+        beneficiary: true,
+        dispute: true,
+      },
+      orderBy: {
+        createdAt: 'desc',
+      },
+    });
+  }
 }
