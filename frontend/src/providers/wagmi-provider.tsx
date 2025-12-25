@@ -1,6 +1,6 @@
 'use client';
 
-import { WagmiProvider, createConfig, http } from 'wagmi';
+import { WagmiProvider, createConfig, http, fallback } from 'wagmi';
 import { polygonAmoy } from 'wagmi/chains';
 import { injected } from 'wagmi/connectors';
 
@@ -8,7 +8,10 @@ export const wagmiConfig = createConfig({
   chains: [polygonAmoy],
   connectors: [injected()],
   transports: {
-    [polygonAmoy.id]: http(),
+    [polygonAmoy.id]: fallback([
+      http('https://rpc.ankr.com/polygon_amoy'),
+      http('https://rpc-amoy.polygon.technology/'),
+    ]),
   },
 });
 
