@@ -15,6 +15,11 @@ export class DepositsController {
     return this.depositsService.findByDepositor(address);
   }
 
+  @Get('beneficiary/:address')
+  async findByBeneficiary(@Param('address') address: string) {
+    return this.depositsService.findByBeneficiary(address);
+  }
+
   @Get(':onChainId')
   async findById(@Param('onChainId') onChainId: string) {
     return this.depositsService.findById(BigInt(onChainId));
