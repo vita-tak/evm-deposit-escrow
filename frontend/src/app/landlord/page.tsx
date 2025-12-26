@@ -1,24 +1,63 @@
 'use client';
 
-import { useState } from 'react';
-import { useWriteContract } from 'wagmi';
+import { useState, useEffect } from 'react';
+import { useWriteContract, useAccount } from 'wagmi';
 import { parseUnits } from 'viem';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { getDepositsByBeneficiary } from '@/lib/api';
+import { DepositCard } from '@/components/DepositCard';
+
 import {
   depositEscrowAddress,
   depositEscrowAbi,
 } from '@/lib/contracts/deposit-escrow';
 
 export default function LandlordPage() {
+  const { address, isConnected } = useAccount();
+  const {
+    writeContract,
+    isPending,
+    isSuccess,
+    error: writeError,
+  } = useWriteContract();
+
+  const [loading, setLoading] = useState(true);
+
+  const [deposits, setDeposits] = useState([]);
   const [depositorAddress, setDepositorAddress] = useState('');
   const [depositAmount, setDepositAmount] = useState('');
   const [periodStart, setPeriodStart] = useState('');
   const [periodEnd, setPeriodEnd] = useState('');
+  const [fetchError, setFetchError] = useState(null);
 
-  const { writeContract, isPending, isSuccess, error } = useWriteContract();
+  useEffect(() => {
+    async function fetchDeposits() {
+      if (!address) {
+        setLoading(false);
+        return;
+      }
+
+      try {
+        setLoading(true);
+        setFetchError(null);
+
+        console.log('Fetching deposits added by:', address);
+        const data = await getDepositsByBeneficiary(address);
+
+        console.log('Received deposits:', data.length);
+        setDeposits(data);
+      } catch (err) {
+        console.error('Error fetching deposits:', err);
+        setFetchError(err.message);
+      } finally {
+        setLoading(false);
+      }
+    }
+    fetchDeposits();
+  }, [address]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -106,9 +145,9 @@ export default function LandlordPage() {
             </div>
           )}
 
-          {error && (
+          {writeError && (
             <div className='p-4 bg-red-100 text-red-800 rounded-lg text-sm'>
-              Error: {error.message}
+              Error: {writeError.message}
             </div>
           )}
 
@@ -129,6 +168,30 @@ export default function LandlordPage() {
           </div>
         </CardContent>
       </Card>
+
+      <div className='mt-8'>
+        <h2 className='text-2xl font-bold mb-4'>My Deposits</h2>
+
+        {loading && <p>Loading deposits...</p>}
+
+        {!loading && deposits.length === 0 && (
+          <p>No deposits yet. Create your first deposit above!</p>
+        )}
+
+        {!loading && deposits.length > 0 && (
+          <div className='grid gap-4'>
+            {deposits.map((deposit) => (
+              <DepositCard key={deposit.id} deposit={deposit} />
+            ))}
+          </div>
+        )}
+
+        {fetchError && (
+          <div className='p-4 bg-red-100 text-red-800 rounded-lg'>
+            Error: {fetchError}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

@@ -17,3 +17,13 @@ export async function getDepositsByDepositor(depositorAddress: string) {
   }
   return response.json();
 }
+
+export async function getDepositsByBeneficiary(beneficiaryAddress: string) {
+  const response = await fetch(
+    `${API_URL}/deposits/beneficiary/${beneficiaryAddress}`
+  );
+  if (!response.ok) {
+    throw new Error('Failed to fetch deposits by beneficiary');
+  }
+  return response.json();
+}

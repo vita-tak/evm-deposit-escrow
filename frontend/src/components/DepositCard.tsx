@@ -29,7 +29,13 @@ interface DepositCardProps {
 
 export function DepositCard({ deposit }: DepositCardProps) {
   const { address, isConnected } = useAccount();
+
   const [isApproved, setIsApproved] = useState(false);
+
+  const isDepositor =
+    address?.toLowerCase() === deposit.depositorAddress.toLowerCase();
+  const isBeneficiary =
+    address?.toLowerCase() === deposit.beneficiaryAddress.toLowerCase();
 
   const {
     writeContract: approveUSDC,
@@ -41,6 +47,12 @@ export function DepositCard({ deposit }: DepositCardProps) {
     writeContract: payDeposit,
     isPending: isPaying,
     isSuccess: paySuccess,
+  } = useWriteContract();
+
+  const {
+    writeContract: confirmCleanExit,
+    isPending: isConfirming,
+    isSuccess: confirmSuccess,
   } = useWriteContract();
 
   const calculateTotal = () => {
@@ -74,6 +86,18 @@ export function DepositCard({ deposit }: DepositCardProps) {
       address: depositEscrowAddress,
       abi: depositEscrowAbi,
       functionName: 'payDeposit',
+      args: [depositId],
+      account: address,
+    });
+  };
+
+  const handleConfirmCleanExit = () => {
+    const depositId = BigInt(deposit.onChainId);
+
+    confirmCleanExit({
+      address: depositEscrowAddress,
+      abi: depositEscrowAbi,
+      functionName: 'confirmCleanExit',
       args: [depositId],
       account: address,
     });
@@ -148,8 +172,25 @@ export function DepositCard({ deposit }: DepositCardProps) {
           </span>
         </div>
 
-        {/* Actions based on status */}
-        {deposit.status === 'WAITING_FOR_DEPOSIT' && (
+        {deposit.status === 'ACTIVE' && (
+          <div className='pt-4'>
+            <div className='p-3 bg-blue-50 rounded-lg text-sm text-blue-800'>
+              Deposit active. Auto-release:{' '}
+              {formatDate(deposit.autoReleaseTime)}
+            </div>
+          </div>
+        )}
+
+        {deposit.status === 'COMPLETED' && (
+          <div className='pt-4'>
+            <div className='p-3 bg-green-50 rounded-lg text-sm text-green-800'>
+              Deposit returned!
+            </div>
+          </div>
+        )}
+
+        {/* Tenant actions - IF user is depositor */}
+        {deposit.status === 'WAITING_FOR_DEPOSIT' && isDepositor && (
           <div className='space-y-3 pt-4'>
             {/* Approve Button */}
             <Button
@@ -172,10 +213,16 @@ export function DepositCard({ deposit }: DepositCardProps) {
               {isPaying ? 'Paying...' : 'Pay Deposit'}
             </Button>
 
-            {/* Success message */}
+            {/* Success messages */}
             {paySuccess && (
               <div className='p-3 bg-green-50 rounded-lg text-sm text-green-800'>
                 Deposit paid successfully! Refresh to see updated status...
+              </div>
+            )}
+
+            {confirmSuccess && (
+              <div className='p-3 bg-green-50 rounded-lg text-sm text-green-800'>
+                Clean exit confirmed! Deposit returned to tenant.
               </div>
             )}
 
@@ -189,20 +236,17 @@ export function DepositCard({ deposit }: DepositCardProps) {
           </div>
         )}
 
-        {deposit.status === 'ACTIVE' && (
-          <div className='pt-4'>
-            <div className='p-3 bg-blue-50 rounded-lg text-sm text-blue-800'>
-              Deposit active. Auto-release:{' '}
-              {formatDate(deposit.autoReleaseTime)}
-            </div>
-          </div>
-        )}
+        {/* Landlord actions - IF user is beneficiary */}
+        {deposit.status === 'ACTIVE' && isBeneficiary && (
+          <div className='space-y-3 pt-4'>
+            <Button
+              onClick={handleConfirmCleanExit}
+              disabled={isConfirming}
+              className='w-full'>
+              {isConfirming ? 'Confirming...' : 'Confirm Clean Exit'}
+            </Button>
 
-        {deposit.status === 'COMPLETED' && (
-          <div className='pt-4'>
-            <div className='p-3 bg-green-50 rounded-lg text-sm text-green-800'>
-              Deposit returned!
-            </div>
+            <Button variant='destructive'>Raise Dispute</Button>
           </div>
         )}
       </CardContent>
