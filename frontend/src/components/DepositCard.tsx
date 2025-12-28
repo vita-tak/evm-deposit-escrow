@@ -7,10 +7,12 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { usdcAddress, usdcAbi } from '@/lib/contracts/usdc';
 import { RaiseDisputeDialog } from '@/components/RaiseDisputeDialog';
+import { RespondToDisputeDialog } from '@/components/RespondToDisputeDialog';
 import {
   depositEscrowAddress,
   depositEscrowAbi,
 } from '@/lib/contracts/deposit-escrow';
+import { getDisputeByDepositId } from '@/lib/api';
 
 interface Deposit {
   id: string;
@@ -33,6 +35,25 @@ export function DepositCard({ deposit }: DepositCardProps) {
 
   const [isApproved, setIsApproved] = useState(false);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+
+  const [isRaiseDisputeDialogOpen, setIsRaiseDisputeDialogOpen] =
+    useState(false);
+  const [isRespondDialogOpen, setIsRespondDialogOpen] = useState(false);
+  const [disputeData, setDisputeData] = useState<any>(null);
+
+  useEffect(() => {
+    async function fetchDispute() {
+      if (deposit.status === 'DISPUTED') {
+        try {
+          const dispute = await getDisputeByDepositId(deposit.onChainId);
+          setDisputeData(dispute);
+        } catch (error) {
+          console.error('Failed to fetch dispute:', error);
+        }
+      }
+    }
+    fetchDispute();
+  }, [deposit.status, deposit.onChainId]);
 
   const isDepositor =
     address?.toLowerCase() === deposit.depositorAddress.toLowerCase();
@@ -259,6 +280,29 @@ export function DepositCard({ deposit }: DepositCardProps) {
               onOpenChange={setIsDialogOpen}
               depositId={deposit.onChainId}
               depositAmount={deposit.depositAmount}
+            />
+          </div>
+        )}
+
+        {/* Tenant Response - IF user is depositor AND status is DISPUTED */}
+        {deposit.status === 'DISPUTED' && isDepositor && (
+          <div className='space-y-3 pt-4'>
+            <div className='p-3 bg-yellow-50 rounded-lg text-sm text-yellow-800'>
+              Landlord has raised a dispute. Feel free to respond with evidence.
+            </div>
+
+            <Button
+              onClick={() => setIsRespondDialogOpen(true)}
+              className='w-full'>
+              Respond to Dispute
+            </Button>
+
+            <RespondToDisputeDialog
+              open={isRespondDialogOpen}
+              onOpenChange={setIsRespondDialogOpen}
+              depositId={deposit.onChainId}
+              claimedAmount={disputeData?.claimedAmount}
+              landlordEvidence={disputeData?.evidenceHash}
             />
           </div>
         )}

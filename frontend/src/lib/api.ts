@@ -27,3 +27,16 @@ export async function getDepositsByBeneficiary(beneficiaryAddress: string) {
   }
   return response.json();
 }
+
+export async function getDisputeByDepositId(onChainId: string) {
+  const response = await fetch(`${API_URL}/disputes/${onChainId}`);
+
+  if (!response.ok) {
+    if (response.status === 404) {
+      return null;
+    }
+    throw new Error('Failed to fetch dispute');
+  }
+
+  return response.json();
+}
