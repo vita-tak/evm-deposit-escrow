@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { usdcAddress, usdcAbi } from '@/lib/contracts/usdc';
+import { RaiseDisputeDialog } from '@/components/RaiseDisputeDialog';
 import {
   depositEscrowAddress,
   depositEscrowAbi,
@@ -31,6 +32,7 @@ export function DepositCard({ deposit }: DepositCardProps) {
   const { address, isConnected } = useAccount();
 
   const [isApproved, setIsApproved] = useState(false);
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
 
   const isDepositor =
     address?.toLowerCase() === deposit.depositorAddress.toLowerCase();
@@ -108,6 +110,10 @@ export function DepositCard({ deposit }: DepositCardProps) {
       setIsApproved(true);
     }
   }, [approveSuccess]);
+
+  const handleRaiseDispute = () => {
+    setIsDialogOpen(true);
+  };
 
   const formatUSDC = (amount: string) => {
     const num = parseInt(amount) / 1_000_000;
@@ -246,7 +252,14 @@ export function DepositCard({ deposit }: DepositCardProps) {
               {isConfirming ? 'Confirming...' : 'Confirm Clean Exit'}
             </Button>
 
-            <Button variant='destructive'>Raise Dispute</Button>
+            <Button onClick={handleRaiseDispute}>Raise Dispute</Button>
+
+            <RaiseDisputeDialog
+              open={isDialogOpen}
+              onOpenChange={setIsDialogOpen}
+              depositId={deposit.onChainId}
+              depositAmount={deposit.depositAmount}
+            />
           </div>
         )}
       </CardContent>
