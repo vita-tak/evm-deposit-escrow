@@ -6,7 +6,11 @@ export class DisputesService {
   constructor(private readonly prisma: PrismaService) {}
 
   findAll() {
-    return this.prisma.dispute.findMany();
+    return this.prisma.dispute.findMany({
+      include: {
+        deposit: true,
+      },
+    });
   }
 
   async findByOnChainId(onChainId: string) {

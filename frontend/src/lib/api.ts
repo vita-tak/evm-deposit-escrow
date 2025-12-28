@@ -40,3 +40,11 @@ export async function getDisputeByDepositId(onChainId: string) {
 
   return response.json();
 }
+
+export async function getAllDisputes() {
+  const response = await fetch(`${API_URL}/disputes`);
+  if (!response.ok) {
+    throw new Error('Failed to fetch disputes');
+  }
+  return response.json();
+}
