@@ -77,7 +77,6 @@ export default function TenantDashboard() {
   return (
     <div className='container mx-auto py-8'>
       <h1 className='text-3xl font-bold mb-8'>Tenant Deposits</h1>
-      <p className='text-sm text-gray-600 mb-8'>Connected as: {address}</p>
 
       {/* Pending Deposits */}
       {pendingDeposits.length > 0 && (

@@ -63,9 +63,6 @@ export default function ResolverPage() {
   return (
     <div className='container mx-auto py-8'>
       <h1 className='text-3xl font-bold mb-8'>Resolver Panel</h1>
-      <p className='text-sm text-gray-600 mb-4'>
-        Connected as: {formatAddress(address!)}
-      </p>
 
       {loading && (
         <div className='p-8 bg-gray-50 rounded-lg text-center'>
