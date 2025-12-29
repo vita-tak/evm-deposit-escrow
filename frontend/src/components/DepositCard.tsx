@@ -280,7 +280,9 @@ export function DepositCard({ deposit }: DepositCardProps) {
               {isConfirming ? 'Confirming...' : 'Confirm Clean Exit'}
             </Button>
 
-            <Button onClick={handleRaiseDispute}>Raise Dispute</Button>
+            <Button onClick={handleRaiseDispute} className='w-full'>
+              Raise Dispute
+            </Button>
 
             <RaiseDisputeDialog
               open={isDialogOpen}
