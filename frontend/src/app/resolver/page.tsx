@@ -88,7 +88,7 @@ export default function ResolverPage() {
             {disputes.length} pending dispute(s)
           </p>
 
-          <div className='grid gap-4'>
+          <div className='grid gap-4 md:grid-cols-2 lg:grid-cols-3'>
             {disputes.map((dispute) => (
               <Card key={dispute.id}>
                 <CardHeader>

@@ -163,7 +163,7 @@ export default function LandlordPage() {
         )}
 
         {!loading && deposits.length > 0 && (
-          <div className='grid gap-4'>
+          <div className='grid gap-4 md:grid-cols-2 lg:grid-cols-3'>
             {deposits.map((deposit) => (
               <DepositCard key={deposit.id} deposit={deposit} />
             ))}
