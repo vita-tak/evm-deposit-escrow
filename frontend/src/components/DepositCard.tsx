@@ -193,6 +193,13 @@ export function DepositCard({ deposit }: DepositCardProps) {
         </div>
 
         <div>
+          <span className='text-sm text-gray-600'>Tenant:</span>
+          <span className='ml-2 font-mono text-sm'>
+            {formatAddress(deposit.depositorAddress)}
+          </span>
+        </div>
+
+        <div>
           <span className='text-sm text-gray-600'>Period:</span>
           <span className='ml-2 text-sm'>
             {formatDate(deposit.periodStart)} → {formatDate(deposit.periodEnd)}
