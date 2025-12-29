@@ -150,27 +150,11 @@ export default function LandlordPage() {
               Error: {writeError.message}
             </div>
           )}
-
-          <div className='mt-8 p-4 bg-muted rounded-lg'>
-            <h3 className='font-semibold mb-2 text-sm'>Debug:</h3>
-            <pre className='text-xs overflow-auto'>
-              {JSON.stringify(
-                {
-                  depositorAddress,
-                  depositAmount,
-                  periodStart,
-                  periodEnd,
-                },
-                null,
-                2
-              )}
-            </pre>
-          </div>
         </CardContent>
       </Card>
 
       <div className='mt-8'>
-        <h2 className='text-2xl font-bold mb-4'>My Deposits</h2>
+        <h2 className='text-2xl font-bold mb-4'>Created Deposits</h2>
 
         {loading && <p>Loading deposits...</p>}
 

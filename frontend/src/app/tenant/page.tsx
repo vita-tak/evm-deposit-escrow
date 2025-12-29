@@ -41,7 +41,7 @@ export default function TenantDashboard() {
   if (!isConnected) {
     return (
       <div className='container mx-auto py-8'>
-        <h1 className='text-3xl font-bold mb-4'>My Deposits</h1>
+        <h1 className='text-3xl font-bold mb-4'>Tenant Deposits</h1>
         <p className='text-gray-600'>
           Please connect your wallet to view your deposits.
         </p>
@@ -52,7 +52,7 @@ export default function TenantDashboard() {
   if (loading) {
     return (
       <div className='container mx-auto py-8'>
-        <h1 className='text-3xl font-bold mb-4'>My Deposits</h1>
+        <h1 className='text-3xl font-bold mb-4'>Tenant Deposits</h1>
         <p>Loading deposits...</p>
       </div>
     );
@@ -61,7 +61,7 @@ export default function TenantDashboard() {
   if (error) {
     return (
       <div className='container mx-auto py-8'>
-        <h1 className='text-3xl font-bold mb-4'>My Deposits</h1>
+        <h1 className='text-3xl font-bold mb-4'>Tenant Deposits</h1>
         <p className='text-red-600'>Error: {error}</p>
       </div>
     );
@@ -76,7 +76,7 @@ export default function TenantDashboard() {
 
   return (
     <div className='container mx-auto py-8'>
-      <h1 className='text-3xl font-bold mb-8'>My Deposits</h1>
+      <h1 className='text-3xl font-bold mb-8'>Tenant Deposits</h1>
       <p className='text-sm text-gray-600 mb-8'>Connected as: {address}</p>
 
       {/* Pending Deposits */}
