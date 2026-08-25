@@ -19,6 +19,9 @@ Disputes are handled on-chain with a timeout mechanism: if no
 resolution is reached within the dispute window, the contract 
 resolves automatically.
 
+<img width="634" height="288" alt="biprental" src="https://github.com/user-attachments/assets/97316919-a08c-4464-a447-565f87185534" /> 
+<img width="640" height="228" alt="biprental2" src="https://github.com/user-attachments/assets/bf20f72f-8198-421d-acdb-f7dba85ea309" />
+
 ## Tech Stack
 
 | Layer | Technology |
