@@ -45,6 +45,14 @@ Deployed to Polygon Amoy testnet. [View contract on Polyscan](https://amoy.polyg
 
 **Non-custodial** — funds are held by the contract, never by a central party
 
+## Why this project
+
+Rental deposits are a broken system. Landlords hold funds with no 
+enforcement mechanism, and tenants have little recourse. This project 
+explores how smart contracts and trustless automation can replace the 
+intermediary entirely, making the rules transparent and self-enforcing 
+from day one.
+
 ## Getting Started
 
 ### Prerequisites
@@ -78,11 +86,3 @@ pnpm run dev
 ```bash
 docker-compose up
 ```
-
-## Why this project
-
-Rental deposits are a broken system. Landlords hold funds with no 
-enforcement mechanism, and tenants have little recourse. This project 
-explores how smart contracts and trustless automation can replace the 
-intermediary entirely, making the rules transparent and self-enforcing 
-from day one.
