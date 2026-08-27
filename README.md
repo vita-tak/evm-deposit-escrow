@@ -7,6 +7,8 @@ to support various deposit scenarios.
 
 Example implementation: Rental deposits (landlord ↔ tenant)
 
+Deployed to Polygon Amoy
+
 ## How it works
 
 The escrow contract holds stablecoin deposits on-chain and releases 
@@ -23,6 +25,8 @@ resolves automatically.
 <img width="640" height="228" alt="biprental2" src="https://github.com/user-attachments/assets/bf20f72f-8198-421d-acdb-f7dba85ea309" />
 
 ## Tech Stack
+
+Deployed to Polygon Amoy. [View contract on Polyscan](https://amoy.polygonscan.com/address/0x70bf1cA32Bf17bd05C014E80cAb4bf770a2c3E6B)
 
 | Layer | Technology |
 |---|---|
