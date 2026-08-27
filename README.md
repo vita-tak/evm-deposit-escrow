@@ -24,6 +24,17 @@ resolves automatically.
 <img width="634" height="288" alt="biprental" src="https://github.com/user-attachments/assets/97316919-a08c-4464-a447-565f87185534" /> 
 <img width="640" height="228" alt="biprental2" src="https://github.com/user-attachments/assets/bf20f72f-8198-421d-acdb-f7dba85ea309" />
 
+## Key Features
+
+**Trustless releases** — Chainlink Automation triggers releases without manual intervention
+
+**Dispute resolution** — on-chain dispute mechanism with automatic timeout enforcement
+
+**Modular design** — core escrow logic is reusable across deposit scenarios beyond rental
+
+**Non-custodial** — funds are held by the contract, never by a central party
+
+
 ## Tech Stack
 
 Deployed to Polygon Amoy testnet. [View contract on Polyscan](https://amoy.polygonscan.com/address/0x70bf1cA32Bf17bd05C014E80cAb4bf770a2c3E6B)
@@ -34,16 +45,6 @@ Deployed to Polygon Amoy testnet. [View contract on Polyscan](https://amoy.polyg
 | Frontend | React, wagmi, viem |
 | Backend | NestJS, TypeScript, PostgreSQL, Prisma |
 | Tools | Docker, Git |
-
-## Key Features
-
-**Trustless releases** — Chainlink Automation triggers releases without manual intervention
-
-**Dispute resolution** — on-chain dispute mechanism with automatic timeout enforcement
-
-**Modular design** — core escrow logic is reusable across deposit scenarios beyond rental
-
-**Non-custodial** — funds are held by the contract, never by a central party
 
 ## Why this project
 
